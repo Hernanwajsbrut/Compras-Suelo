@@ -316,12 +316,13 @@ export default function App(){
     setSaving(false);
   }
 
-  async function doSimpleAction(pedido,action,comment=""){
+  async function doSimpleAction(pedido, action, comment="", extraMeta={}){
     const entry={accion:action.label,usuario:user.name,rol:RL[user.role],ts:Date.now(),comentario:comment};
     const newH=[...pedido.historial,entry];
+    const newMeta={...pedido.metadata,...extraMeta};
     try{
-      await sb.patch("pedidos",pedido.id,{estado:action.newEstado,historial:newH});
-      const up={...pedido,estado:action.newEstado,historial:newH};
+      await sb.patch("pedidos",pedido.id,{estado:action.newEstado,historial:newH,metadata:newMeta});
+      const up={...pedido,estado:action.newEstado,historial:newH,metadata:newMeta};
       setPedidos(prev=>prev.map(p=>p.id===pedido.id?up:p));
       setSel(up);
     }catch(e){alert("Error al guardar la acción.");}
@@ -652,8 +653,13 @@ export default function App(){
 // ── Detail View ─────────────────────────────────────────────────
 function DetailView({pedido, user, onSimpleAction, onFormAction, onDelete, onBack}){
   const [comment, setComment]=useState("");
+  const [fechaRecepcion, setFechaRecepcion]=useState("");
+  const [nroRemito, setNroRemito]=useState("");
   const actions=getActions(pedido,user.role);
   const meta=pedido.metadata||{};
+
+  const isDeliveryAction = a => ["Marcar Entregado","Marcar Recibido"].includes(a.label);
+  const hasDelivery = actions.some(isDeliveryAction);
 
   return(
     <div className="max-w-2xl">
@@ -700,18 +706,48 @@ function DetailView({pedido, user, onSimpleAction, onFormAction, onDelete, onBac
           </div>
         )}
 
+        {/* Datos de recepción (si ya fue entregado) */}
+        {meta.fecha_recepcion&&(
+          <div className="mt-4 bg-green-50 rounded-lg p-4 border border-green-100 space-y-1">
+            <p className="text-xs font-semibold text-green-700 mb-2">📦 Datos de recepción</p>
+            <InfoRow label="Fecha de recepción" val={meta.fecha_recepcion}/>
+            {meta.nro_remito&&<InfoRow label="N° de remito" val={meta.nro_remito}/>}
+          </div>
+        )}
+
         {/* Actions */}
         {actions.length>0&&(
           <div className="mt-5 border-t border-slate-100 pt-5">
             <h3 className="font-semibold text-slate-700 mb-3">Tu acción requerida</h3>
-            {!actions.some(a=>a.formType)&&(
-              <textarea className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none mb-3" rows={2} placeholder="Comentario opcional..." value={comment} onChange={e=>setComment(e.target.value)}/>
+
+            {/* Campos de entrega — solo cuando hay acción de entrega */}
+            {hasDelivery&&(
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4 space-y-3">
+                <p className="text-xs font-semibold text-green-700">📦 Datos de recepción</p>
+                <Fld label="Fecha de recepción *">
+                  <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                    value={fechaRecepcion} onChange={e=>setFechaRecepcion(e.target.value)}/>
+                </Fld>
+                <Fld label="N° de remito">
+                  <input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                    placeholder="Ej: 0001-00012345"
+                    value={nroRemito} onChange={e=>setNroRemito(e.target.value)}/>
+                </Fld>
+              </div>
             )}
+
+            {!actions.some(a=>a.formType)&&(
+              <textarea className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none mb-3" rows={2}
+                placeholder="Comentario opcional..." value={comment} onChange={e=>setComment(e.target.value)}/>
+            )}
+
             <div className="flex flex-wrap gap-2">
               {actions.map(a=>(
                 <button key={a.label} onClick={()=>{
-                  if(a.formType) onFormAction(a);
-                  else onSimpleAction(pedido,a,comment).then(()=>setComment(""));
+                  if(a.formType){ onFormAction(a); return; }
+                  if(isDeliveryAction(a)&&!fechaRecepcion){ alert("Ingresá la fecha de recepción"); return; }
+                  const extra = isDeliveryAction(a) ? {fecha_recepcion:fechaRecepcion, nro_remito:nroRemito} : {};
+                  onSimpleAction(pedido,a,comment,extra).then(()=>{ setComment(""); setFechaRecepcion(""); setNroRemito(""); });
                 }} className={`px-4 py-2 rounded-lg text-sm font-medium transition ${BC[a.color]}`}>
                   {a.label}
                 </button>
