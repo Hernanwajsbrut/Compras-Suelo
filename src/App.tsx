@@ -55,7 +55,11 @@ const fmtDate = ts => new Date(ts).toLocaleString("es-AR",{dateStyle:"short",tim
 const fmtMoney = n => n ? new Intl.NumberFormat("es-AR",{style:"currency",currency:"ARS",minimumFractionDigits:0}).format(Number(n)) : "";
 function addBD(d,n){let r=new Date(d),a=0;while(a<n){r.setDate(r.getDate()+1);if(r.getDay()!==0&&r.getDay()!==6)a++;}return r;}
 const minDel = () => addBD(new Date(),2).toISOString().slice(0,10);
-function getRef(cod,tipo,pedidos,obraId){const n=pedidos.filter(p=>p.obraId===obraId&&p.tipo===tipo).length+1;return `#${cod}_${TC[tipo]}_${n}`;}
+function getRef(cod,tipo,pedidos,obraId){
+  const fecha=new Date().toISOString().slice(0,10).replace(/-/g,"");
+  const n=pedidos.filter(p=>p.obraId===obraId&&p.tipo===tipo).length+1;
+  return `#${cod}_${fecha}_${TC[tipo]}_${n}`;
+}
 const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 
 // ── State machine ──────────────────────────────────────────────
