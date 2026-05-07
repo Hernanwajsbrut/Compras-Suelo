@@ -317,7 +317,7 @@ export default function App(){
       fecha_entrega:newForm.tipo==="compra_chica"?newForm.fechaEntrega:null,
       urgencia:newForm.urgencia||null,
       creado_por:user.id, creado_nombre:user.name, creado_at:Date.now(),
-      historial, metadata:{},
+      historial, metadata: newForm.proveedores?.length ? {proveedores_cotizacion: newForm.proveedores.map(n=>({id:uid(),nombre:n,estado:"enviado_a_cotizar",ts:Date.now()}))} : {},
     };
     setSaving(true);
     try{
@@ -340,15 +340,12 @@ export default function App(){
     }catch(e){alert("Error al guardar la acción.");}
   }
 
-  async function doFormAction(pedido,action,form){
-    const {newEstado,newMeta}=resolveAction(action,pedido,form);
-    const entry={accion:action.label,usuario:user.name,rol:RL[user.role],ts:Date.now(),comentario:form.comment||""};
-    const newH=[...pedido.historial,entry];
+  async function updateMeta(pedido, newMeta){
     try{
-      await sb.patch("pedidos",pedido.id,{estado:newEstado,historial:newH,metadata:newMeta});
-      const up={...pedido,estado:newEstado,historial:newH,metadata:newMeta};
+      await sb.patch("pedidos",pedido.id,{metadata:newMeta});
+      const up={...pedido,metadata:newMeta};
       setPedidos(prev=>prev.map(p=>p.id===pedido.id?up:p));
-      setSel(up);setActionModal(null);
+      setSel(up);
     }catch(e){alert("Error al guardar.");}
   }
 
@@ -529,7 +526,31 @@ export default function App(){
         </div>
       </div>
     )}
-  </>
+  {user.role==="arquitecto"&&(
+  <div className="border border-slate-200 rounded-lg overflow-hidden">
+    <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
+      <p className="text-xs font-semibold text-slate-600">📨 Proveedores a cotizar</p>
+    </div>
+    <div className="p-3 space-y-2">
+      {(newForm.proveedores||[]).map((p,i)=>(
+        <div key={i} className="flex items-center gap-2">
+          <span className="text-sm text-slate-700 flex-1">{p}</span>
+          <button type="button" onClick={()=>setNewForm(f=>({...f,proveedores:f.proveedores.filter((_,j)=>j!==i)}))} className="text-slate-300 hover:text-red-400 text-xs">✕</button>
+        </div>
+      ))}
+      <div className="flex gap-2">
+        <input className="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-sm"
+          placeholder="Nombre del proveedor..."
+          value={newForm.provNuevo||""}
+          onChange={e=>setNewForm(f=>({...f,provNuevo:e.target.value}))}
+          onKeyDown={e=>{if(e.key==="Enter"&&newForm.provNuevo?.trim()){setNewForm(f=>({...f,proveedores:[...(f.proveedores||[]),f.provNuevo.trim()],provNuevo:""}));}}}/>
+        <button type="button"
+          onClick={()=>{if(newForm.provNuevo?.trim())setNewForm(f=>({...f,proveedores:[...(f.proveedores||[]),f.provNuevo.trim()],provNuevo:""}));}}
+          className="bg-slate-800 hover:bg-slate-700 text-white text-xs px-3 py-1.5 rounded-lg">+ Agregar</button>
+      </div>
+    </div>
+  </div>
+)}</>
 )}
               <Fld label="Observaciones">
                 <textarea className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" rows={3} placeholder="Detalles, referencia al servidor interno..." value={newForm.descripcion} onChange={e=>setNewForm(f=>({...f,descripcion:e.target.value}))}/>
@@ -651,12 +672,13 @@ export default function App(){
         {/* DETALLE */}
         {view==="detalle"&&sel&&(
           <DetailView
-            pedido={sel} user={user}
-            onSimpleAction={doSimpleAction}
-            onFormAction={(action)=>setActionModal({action,pedido:sel})}
-            onDelete={isDir?()=>setDelConfirm(sel):null}
-            onBack={()=>{setSel(null);setView("dashboard");}}
-          />
+          pedido={sel} user={user}
+          onSimpleAction={doSimpleAction}
+          onFormAction={(action)=>setActionModal({action,pedido:sel})}
+          onDelete={isDir?()=>setDelConfirm(sel):null}
+          onBack={()=>{setSel(null);setView("dashboard");}}
+          onUpdateMeta={(newMeta)=>updateMeta(sel,newMeta)}
+        />
         )}
 
       </main>
@@ -689,15 +711,41 @@ export default function App(){
 }
 
 // ── Detail View ─────────────────────────────────────────────────
-function DetailView({pedido, user, onSimpleAction, onFormAction, onDelete, onBack}){
+function DetailView({pedido, user, onSimpleAction, onFormAction, onDelete, onBack, onUpdateMeta}){
   const [comment, setComment]=useState("");
   const [fechaRecepcion, setFechaRecepcion]=useState("");
   const [nroRemito, setNroRemito]=useState("");
+  const [provNombre, setProvNombre]=useState("");
   const actions=getActions(pedido,user.role);
   const meta=pedido.metadata||{};
+  const proveedores=meta.proveedores_cotizacion||[];
 
   const isDeliveryAction = a => ["Marcar Entregado","Marcar Recibido"].includes(a.label);
   const hasDelivery = actions.some(isDeliveryAction);
+  const canManageProvs = user.role==="compras"||user.role==="director"||(user.role==="arquitecto"&&pedido.tipo==="licitacion");
+  const isActive = ACTIVE_ESTADOS.includes(pedido.estado);
+
+  function toggleEnProceso(){
+    onUpdateMeta({...meta, en_proceso:!meta.en_proceso});
+  }
+  function addProveedor(){
+    if(!provNombre.trim()) return;
+    const newProvs=[...proveedores,{id:uid(),nombre:provNombre.trim(),estado:"enviado_a_cotizar",ts:Date.now()}];
+    onUpdateMeta({...meta,proveedores_cotizacion:newProvs});
+    setProvNombre("");
+  }
+  function updateProvEstado(id,estado){
+    onUpdateMeta({...meta,proveedores_cotizacion:proveedores.map(p=>p.id===id?{...p,estado}:p)});
+  }
+  function removeProveedor(id){
+    onUpdateMeta({...meta,proveedores_cotizacion:proveedores.filter(p=>p.id!==id)});
+  }
+
+  const PROV_EST = {
+    enviado_a_cotizar:{label:"Enviado a cotizar",color:"bg-sky-100 text-sky-700"},
+    presup_recibido:{label:"Presup. recibido",color:"bg-green-100 text-green-700"},
+    recibido_con_error:{label:"Recibido con error",color:"bg-red-100 text-red-700"},
+  };
 
   return(
     <div className="max-w-2xl">
@@ -708,12 +756,14 @@ function DetailView({pedido, user, onSimpleAction, onFormAction, onDelete, onBac
         )}
       </div>
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+
         {/* Header */}
         <div className="flex flex-wrap items-center gap-2 mb-3">
           <span className="font-mono text-sm font-bold text-slate-600">{pedido.referencia}</span>
           <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${TIPO_CLR[pedido.tipo]}`}>{TL[pedido.tipo]}</span>
           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${EC[pedido.estado]}`}>{EL[pedido.estado]}</span>
           {pedido.urgencia&&<span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${UC[pedido.urgencia]}`}>⚡ {pedido.urgencia}</span>}
+          {meta.en_proceso&&<span className="text-xs font-medium px-2 py-0.5 rounded-full bg-yellow-200 text-yellow-800">🔄 En proceso</span>}
         </div>
         <h2 className="text-xl font-bold text-slate-800">{pedido.titulo}</h2>
         <p className="text-sm text-slate-500 mt-1">🏢 {pedido.obraNombre}</p>
@@ -725,7 +775,21 @@ function DetailView({pedido, user, onSimpleAction, onFormAction, onDelete, onBac
           </div>
         )}
 
-        {/* Metadata (approval info) */}
+        {/* Toggle En Proceso — solo compras y directores */}
+        {(user.role==="compras"||user.role==="director")&&isActive&&(
+          <div className="mt-4 flex items-center gap-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+            <button type="button" onClick={toggleEnProceso}
+              className={`relative w-11 h-6 rounded-full transition flex-shrink-0 ${meta.en_proceso?"bg-yellow-500":"bg-slate-300"}`}>
+              <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${meta.en_proceso?"left-5":"left-0.5"}`}/>
+            </button>
+            <div>
+              <p className="text-sm font-medium text-yellow-800">En proceso</p>
+              <p className="text-xs text-yellow-600">{meta.en_proceso?"Compras está trabajando en esta orden":"Marcar cuando estés trabajando en esta orden"}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Datos de la compra (metadata de aprobación) */}
         {meta.proveedor&&(
           <div className="mt-4 bg-blue-50 rounded-lg p-4 border border-blue-100 space-y-1">
             <p className="text-xs font-semibold text-blue-700 mb-2">📋 Datos de la compra</p>
@@ -744,7 +808,7 @@ function DetailView({pedido, user, onSimpleAction, onFormAction, onDelete, onBac
           </div>
         )}
 
-        {/* Datos de recepción (si ya fue entregado) */}
+        {/* Datos de recepción */}
         {meta.fecha_recepcion&&(
           <div className="mt-4 bg-green-50 rounded-lg p-4 border border-green-100 space-y-1">
             <p className="text-xs font-semibold text-green-700 mb-2">📦 Datos de recepción</p>
@@ -753,12 +817,46 @@ function DetailView({pedido, user, onSimpleAction, onFormAction, onDelete, onBac
           </div>
         )}
 
-        {/* Actions */}
+        {/* Proveedores consultados */}
+        {canManageProvs&&(
+          <div className="mt-4 border border-slate-200 rounded-lg overflow-hidden">
+            <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
+              <p className="text-xs font-semibold text-slate-600">📨 Proveedores consultados</p>
+            </div>
+            <div className="p-4 space-y-3">
+              {proveedores.length===0&&<p className="text-xs text-slate-400 text-center py-2">Todavía no se agregaron proveedores</p>}
+              {proveedores.map(p=>(
+                <div key={p.id} className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-medium text-slate-700 flex-1 min-w-0 truncate">{p.nombre}</span>
+                  <div className="flex gap-1 flex-wrap">
+                    {Object.entries(PROV_EST).map(([k,v])=>(
+                      <button key={k} onClick={()=>updateProvEstado(p.id,k)}
+                        className={`text-xs px-2 py-1 rounded-full border transition ${p.estado===k?v.color+" border-transparent font-medium":"bg-white text-slate-400 border-slate-200 hover:border-slate-300"}`}>
+                        {v.label}
+                      </button>
+                    ))}
+                  </div>
+                  <button onClick={()=>removeProveedor(p.id)} className="text-slate-300 hover:text-red-400 text-xs px-1">✕</button>
+                </div>
+              ))}
+              {/* Agregar proveedor */}
+              {isActive&&(
+                <div className="flex gap-2 pt-1 border-t border-slate-100">
+                  <input className="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-sm"
+                    placeholder="Nombre del proveedor..."
+                    value={provNombre} onChange={e=>setProvNombre(e.target.value)}
+                    onKeyDown={e=>e.key==="Enter"&&addProveedor()}/>
+                  <button onClick={addProveedor} className="bg-slate-800 hover:bg-slate-700 text-white text-xs px-3 py-1.5 rounded-lg">+ Agregar</button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Acciones */}
         {actions.length>0&&(
           <div className="mt-5 border-t border-slate-100 pt-5">
             <h3 className="font-semibold text-slate-700 mb-3">Tu acción requerida</h3>
-
-            {/* Campos de entrega — solo cuando hay acción de entrega */}
             {hasDelivery&&(
               <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4 space-y-3">
                 <p className="text-xs font-semibold text-green-700">📦 Datos de recepción</p>
@@ -773,19 +871,17 @@ function DetailView({pedido, user, onSimpleAction, onFormAction, onDelete, onBac
                 </Fld>
               </div>
             )}
-
             {!actions.some(a=>a.formType)&&(
               <textarea className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none mb-3" rows={2}
                 placeholder="Comentario opcional..." value={comment} onChange={e=>setComment(e.target.value)}/>
             )}
-
             <div className="flex flex-wrap gap-2">
               {actions.map(a=>(
                 <button key={a.label} onClick={()=>{
-                  if(a.formType){ onFormAction(a); return; }
-                  if(isDeliveryAction(a)&&!fechaRecepcion){ alert("Ingresá la fecha de recepción"); return; }
-                  const extra = isDeliveryAction(a) ? {fecha_recepcion:fechaRecepcion, nro_remito:nroRemito} : {};
-                  onSimpleAction(pedido,a,comment,extra).then(()=>{ setComment(""); setFechaRecepcion(""); setNroRemito(""); });
+                  if(a.formType){onFormAction(a);return;}
+                  if(isDeliveryAction(a)&&!fechaRecepcion){alert("Ingresá la fecha de recepción");return;}
+                  const extra=isDeliveryAction(a)?{fecha_recepcion:fechaRecepcion,nro_remito:nroRemito}:{};
+                  onSimpleAction(pedido,a,comment,extra).then(()=>{setComment("");setFechaRecepcion("");setNroRemito("");});
                 }} className={`px-4 py-2 rounded-lg text-sm font-medium transition ${BC[a.color]}`}>
                   {a.label}
                 </button>
@@ -814,7 +910,6 @@ function DetailView({pedido, user, onSimpleAction, onFormAction, onDelete, onBac
     </div>
   );
 }
-
 // ── Action Modal ────────────────────────────────────────────────
 function ActionModal({modal, onSubmit, onClose}){
   const {action, pedido} = modal;
