@@ -46,7 +46,7 @@ const BC = {
 const UC = { bajo:"bg-green-100 text-green-700", medio:"bg-yellow-100 text-yellow-700", alto:"bg-red-100 text-red-700" };
 const CREATE_PERMS = {
   director:["compra_chica","compra_grande","licitacion","acopio"],
-  jefe_obra:["compra_chica","compra_grande"],
+  jefe_obra:["compra_chica","compra_grande","licitacion"],
   arquitecto:["compra_chica","compra_grande","licitacion"],
   compras:[], admin:[],
 };
