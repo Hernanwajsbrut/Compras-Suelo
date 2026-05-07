@@ -24,14 +24,14 @@ const TIPO_CLR = {
   acopio:"bg-purple-100 text-purple-800 border-purple-200",
 };
 const EL = {
-  nuevo:"Nuevo", cotizado:"Cotizado", desacopiado:"Desacopiado",
+  nuevo:"Nuevo", doc_lista:"Documentación Lista", cotizado:"Cotizado", desacopiado:"Desacopiado",
   pendiente_dir:"Pend. Aprobación Dir.", pend_pago:"Pendiente Pago",
   pend_pago_anticipo:"Pend. Pago Anticipo", pend_entrega:"Pendiente Entrega",
   pend_pago_saldo:"Pend. Saldo", pendiente_firma:"Pend. Firma Contrato",
   rechazado:"Rechazado", archivado:"Archivado",
 };
 const EC = {
-  nuevo:"bg-yellow-100 text-yellow-800", cotizado:"bg-sky-100 text-sky-800",
+  nuevo:"bg-yellow-100 text-yellow-800", doc_lista:"bg-indigo-100 text-indigo-800", cotizado:"bg-sky-100 text-sky-800",
   desacopiado:"bg-teal-100 text-teal-800", pendiente_dir:"bg-orange-100 text-orange-800",
   pend_pago:"bg-violet-100 text-violet-800", pend_pago_anticipo:"bg-violet-100 text-violet-800",
   pend_entrega:"bg-green-100 text-green-800", pend_pago_saldo:"bg-violet-100 text-violet-800",
@@ -50,7 +50,7 @@ const CREATE_PERMS = {
   arquitecto:["compra_chica","compra_grande","licitacion"],
   compras:[], admin:[],
 };
-const ACTIVE_ESTADOS = ["nuevo","cotizado","desacopiado","pendiente_dir","pend_pago","pend_pago_anticipo","pend_entrega","pend_pago_saldo","pendiente_firma"];
+const ACTIVE_ESTADOS = ["nuevo","doc_lista", "cotizado","desacopiado","pendiente_dir","pend_pago","pend_pago_anticipo","pend_entrega","pend_pago_saldo","pendiente_firma"];
 const fmtDate = ts => new Date(ts).toLocaleString("es-AR",{dateStyle:"short",timeStyle:"short"});
 const fmtMoney = n => n ? new Intl.NumberFormat("es-AR",{style:"currency",currency:"ARS",minimumFractionDigits:0}).format(Number(n)) : "";
 function addBD(d,n){let r=new Date(d),a=0;while(a<n){r.setDate(r.getDate()+1);if(r.getDay()!==0&&r.getDay()!==6)a++;}return r;}
@@ -123,13 +123,21 @@ function getActions(pedido, role) {
 
   // LICITACIÓN ───────────────────────────────────────────────
   if(tipo==="licitacion"){
-    if(estado==="nuevo"&&(isCo||d)) return [{label:"Marcar Cotizado", newEstado:"cotizado", color:"sky"}, rej];
+    // Marcar doc lista — solo arquitectos
+    if(estado==="nuevo"&&role==="arquitecto")
+      return [{label:"Documentación Lista",newEstado:"doc_lista",color:"sky"}];
+    // Desde doc_lista → compras cotiza
+    if(estado==="doc_lista"&&(isCo||d))
+      return [{label:"Marcar Cotizado",newEstado:"cotizado",color:"sky"},rej];
+    // Flujo normal desde cotizado
     if(estado==="cotizado"){
-      if(d)    return [{label:"Aprobar", newEstado:null, color:"green", formType:"approve_dir_licitacion"}, rej];
+      if(d)    return [{label:"Aprobar",newEstado:null,color:"green",formType:"approve_dir_licitacion"},rej];
       if(isCo) return [rej];
     }
-    if(estado==="pendiente_firma"&&(isAd||d)) return [{label:"Marcar Contrato Firmado", newEstado:"archivado", color:"emerald"}];
-    if(estado==="pend_pago"&&(isAd||d))       return [{label:"Marcar Anticipo Pagado",  newEstado:"archivado", color:"purple"}];
+    if(estado==="pendiente_firma"&&(isAd||d))
+      return [{label:"Marcar Contrato Firmado",newEstado:"archivado",color:"emerald"}];
+    if(estado==="pend_pago"&&(isAd||d))
+      return [{label:"Marcar Anticipo Pagado",newEstado:"archivado",color:"purple"}];
   }
 
   // ACOPIO ───────────────────────────────────────────────────
@@ -305,7 +313,7 @@ export default function App(){
       id:uid().toUpperCase(), referencia:getRef(obra.codigo,newForm.tipo,pedidos,newForm.obraId),
       tipo:newForm.tipo, titulo:newForm.titulo.trim(),
       obra_id:newForm.obraId, obra_nombre:obra.nombre,
-      descripcion:newForm.descripcion.trim(), estado:"nuevo",
+      descripcion:newForm.descripcion.trim(), estado: newForm.tipo==="licitacion"&&newForm.docLista ? "doc_lista" : "nuevo",
       fecha_entrega:newForm.tipo==="compra_chica"?newForm.fechaEntrega:null,
       urgencia:newForm.urgencia||null,
       creado_por:user.id, creado_nombre:user.name, creado_at:Date.now(),
@@ -485,18 +493,44 @@ export default function App(){
                   <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" min={minDel()} value={newForm.fechaEntrega} onChange={e=>setNewForm(f=>({...f,fechaEntrega:e.target.value}))}/>
                 </Fld>
               )}
-              {["compra_grande","licitacion","acopio"].includes(newForm.tipo)&&(
-                <Fld label="Nivel de urgencia *">
-                  <div className="flex gap-2">
-                    {["bajo","medio","alto"].map(u=>(
-                      <button key={u} type="button" onClick={()=>setNewForm(f=>({...f,urgencia:u}))}
-                        className={`flex-1 py-2 rounded-lg text-sm font-medium border-2 transition capitalize ${newForm.urgencia===u?(u==="bajo"?"border-green-500 bg-green-50 text-green-700":u==="medio"?"border-yellow-500 bg-yellow-50 text-yellow-700":"border-red-500 bg-red-50 text-red-700"):"border-slate-200 text-slate-400"}`}>
-                        {u==="bajo"?"🟢 Bajo":u==="medio"?"🟡 Medio":"🔴 Alto"}
-                      </button>
-                    ))}
-                  </div>
-                </Fld>
-              )}
+              {["compra_grande","acopio"].includes(newForm.tipo)&&(
+  <Fld label="Nivel de urgencia *">
+    <div className="flex gap-2">
+      {["bajo","medio","alto"].map(u=>(
+        <button key={u} type="button" onClick={()=>setNewForm(f=>({...f,urgencia:u}))}
+          className={`flex-1 py-2 rounded-lg text-sm font-medium border-2 transition capitalize ${newForm.urgencia===u?(u==="bajo"?"border-green-500 bg-green-50 text-green-700":u==="medio"?"border-yellow-500 bg-yellow-50 text-yellow-700":"border-red-500 bg-red-50 text-red-700"):"border-slate-200 text-slate-400"}`}>
+          {u==="bajo"?"🟢 Bajo":u==="medio"?"🟡 Medio":"🔴 Alto"}
+        </button>
+      ))}
+    </div>
+  </Fld>
+)}
+{newForm.tipo==="licitacion"&&(
+  <>
+    <Fld label="Nivel de urgencia *">
+      <div className="flex gap-2">
+        {["bajo","medio","alto"].map(u=>(
+          <button key={u} type="button" onClick={()=>setNewForm(f=>({...f,urgencia:u}))}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium border-2 transition capitalize ${newForm.urgencia===u?(u==="bajo"?"border-green-500 bg-green-50 text-green-700":u==="medio"?"border-yellow-500 bg-yellow-50 text-yellow-700":"border-red-500 bg-red-50 text-red-700"):"border-slate-200 text-slate-400"}`}>
+            {u==="bajo"?"🟢 Bajo":u==="medio"?"🟡 Medio":"🔴 Alto"}
+          </button>
+        ))}
+      </div>
+    </Fld>
+    {user.role==="arquitecto"&&(
+      <div className="flex items-center gap-3 bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+        <button type="button" onClick={()=>setNewForm(f=>({...f,docLista:!f.docLista}))}
+          className={`relative w-11 h-6 rounded-full transition flex-shrink-0 ${newForm.docLista?"bg-indigo-600":"bg-slate-300"}`}>
+          <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${newForm.docLista?"left-5":"left-0.5"}`}/>
+        </button>
+        <div>
+          <p className="text-sm font-medium text-indigo-800">Documentación lista</p>
+          <p className="text-xs text-indigo-500">{newForm.docLista?"Pasa directo a Compras":"Queda en espera hasta que la marqués lista"}</p>
+        </div>
+      </div>
+    )}
+  </>
+)}
               <Fld label="Observaciones">
                 <textarea className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" rows={3} placeholder="Detalles, referencia al servidor interno..." value={newForm.descripcion} onChange={e=>setNewForm(f=>({...f,descripcion:e.target.value}))}/>
               </Fld>
