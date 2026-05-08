@@ -348,7 +348,18 @@ export default function App(){
       setSel(up);
     }catch(e){alert("Error al guardar la acción.");}
   }
-
+  async function doFormAction(pedido, action, form){
+    const {newEstado, newMeta}=resolveAction(action, pedido, form);
+    if(!newEstado){alert("Error: no se pudo determinar el estado siguiente.");return;}
+    const entry={accion:action.label,usuario:user.name,rol:RL[user.role],ts:Date.now(),comentario:form.comment||""};
+    const newH=[...pedido.historial,entry];
+    try{
+      await sb.patch("pedidos",pedido.id,{estado:newEstado,historial:newH,metadata:newMeta});
+      const up={...pedido,estado:newEstado,historial:newH,metadata:newMeta};
+      setPedidos(prev=>prev.map(p=>p.id===pedido.id?up:p));
+      setSel(up);setActionModal(null);
+    }catch(e){alert("Error al guardar: "+e.message);}
+  }
   async function updateMeta(pedido, newMeta){
     try{
       await sb.patch("pedidos",pedido.id,{metadata:newMeta});
