@@ -66,51 +66,53 @@ const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 function getActions(pedido, role) {
   const {tipo, estado} = pedido;
   const meta = pedido.metadata||{};
-  const d=role==="director", isCo=role==="compras", isAd=role==="admin", isOb=role==="jefe_obra";
+  const d=role==="director", isCo=role==="compras", isAd=role==="admin",
+        isOb=role==="jefe_obra", isAr=role==="arquitecto";
   if(["rechazado","archivado"].includes(estado)) return [];
   const rej = {label:"Rechazar", newEstado:"rechazado", color:"red"};
+  const canDeliver = isOb||isCo||d; // obra, compras y directores pueden marcar entrega
 
-  // COMPRA CHICA ─────────────────────────────────────────────
+  // ── COMPRA CHICA ──────────────────────────────────────────
   if(tipo==="compra_chica"){
     if(estado==="nuevo"&&(isCo||d)) return [
       {label:"Aprobar Compra", newEstado:null, color:"green", formType:"approve_cc"},
       {label:"Desacopiar",     newEstado:"desacopiado", color:"teal"},
       rej,
     ];
-    if(estado==="desacopiado"&&(isOb||d))
+    if(estado==="desacopiado"&&canDeliver)
       return [{label:"Marcar Entregado", newEstado:"archivado", color:"green"}];
     if(estado==="pendiente_dir"){
-      if(d) return [{label:"Confirmar Aprobación", newEstado:null, color:"green", formType:"approve_cc_dir"}, rej];
+      if(d)   return [{label:"Confirmar Aprobación", newEstado:null, color:"green", formType:"approve_cc_dir"}, rej];
       if(isCo) return [rej];
     }
     if(estado==="pend_pago"&&(isAd||d)){
       const next = meta.route==="anticipado" ? "pend_entrega" : "archivado";
       return [{label:"Marcar Pagado", newEstado:next, color:"purple"}];
     }
-    if(estado==="pend_entrega"&&(isOb||d)){
+    if(estado==="pend_entrega"&&canDeliver){
       if(meta.route==="anticipado") return [{label:"Marcar Recibido", newEstado:"archivado", color:"green"}];
       return [{label:"Marcar Entregado", newEstado:"pend_pago", color:"green"}];
     }
   }
 
-  // COMPRA GRANDE ────────────────────────────────────────────
+  // ── COMPRA GRANDE ─────────────────────────────────────────
   if(tipo==="compra_grande"){
     if(estado==="nuevo"&&(isCo||d)) return [
-      {label:"Marcar Cotizado", newEstado:"cotizado", color:"sky"},
+      {label:"Marcar Cotizado", newEstado:"cotizado",    color:"sky"},
       {label:"Desacopiar",      newEstado:"desacopiado", color:"teal"},
       rej,
     ];
     if(estado==="cotizado"){
-      if(d)   return [{label:"Aprobar", newEstado:null, color:"green", formType:"approve_dir_grande"}, rej];
+      if(d)    return [{label:"Aprobar", newEstado:null, color:"green", formType:"approve_dir_grande"}, rej];
       if(isCo) return [rej];
     }
-    if(estado==="desacopiado"&&(isOb||d))
+    if(estado==="desacopiado"&&canDeliver)
       return [{label:"Marcar Entregado", newEstado:"archivado", color:"green"}];
     if(estado==="pend_pago_anticipo"&&(isAd||d))
       return [{label:"Marcar Anticipo Pagado", newEstado:"pend_entrega", color:"purple"}];
-    if(estado==="pend_entrega"&&(isOb||d)){
-      if(meta.route==="anticipado")   return [{label:"Marcar Recibido",  newEstado:"archivado",      color:"green"}];
-      if(meta.route==="pago_parcial") return [{label:"Marcar Entregado", newEstado:"pend_pago_saldo", color:"green"}];
+    if(estado==="pend_entrega"&&canDeliver){
+      if(meta.route==="anticipado")   return [{label:"Marcar Recibido",  newEstado:"archivado",       color:"green"}];
+      if(meta.route==="pago_parcial") return [{label:"Marcar Entregado", newEstado:"pend_pago_saldo",  color:"green"}];
       return [{label:"Marcar Entregado", newEstado:"pend_pago", color:"green"}];
     }
     if(estado==="pend_pago"&&(isAd||d)){
@@ -121,34 +123,41 @@ function getActions(pedido, role) {
       return [{label:"Marcar Saldo Pagado", newEstado:"archivado", color:"purple"}];
   }
 
-  // LICITACIÓN ───────────────────────────────────────────────
+  // ── LICITACIÓN ────────────────────────────────────────────
   if(tipo==="licitacion"){
-    // Marcar doc lista — solo arquitectos
-    if(estado==="nuevo"&&role==="arquitecto")
-      return [{label:"Documentación Lista",newEstado:"doc_lista",color:"sky"}];
-    // Desde doc_lista → compras cotiza
-    if(estado==="doc_lista"&&(isCo||d))
-      return [{label:"Marcar Cotizado",newEstado:"cotizado",color:"sky"},rej];
-    // Flujo normal desde cotizado
-    if(estado==="cotizado"){
-      if(d)    return [{label:"Aprobar",newEstado:null,color:"green",formType:"approve_dir_licitacion"},rej];
-      if(isCo) return [rej];
+    if(estado==="nuevo"){
+      if(isAr)       return [{label:"Documentación Lista", newEstado:"doc_lista", color:"indigo"}];
+      if(isCo||d)    return [rej];
     }
-    if(estado==="pendiente_firma"&&(isAd||d))
-      return [{label:"Marcar Contrato Firmado",newEstado:"archivado",color:"emerald"}];
-    if(estado==="pend_pago"&&(isAd||d))
-      return [{label:"Marcar Anticipo Pagado",newEstado:"archivado",color:"purple"}];
+    if(estado==="doc_lista"){
+      if(isCo||d)    return [{label:"Marcar Cotizado", newEstado:"cotizado", color:"sky"}, rej];
+    }
+    if(estado==="cotizado"){
+      if(d)          return [{label:"Aprobar", newEstado:null, color:"green", formType:"approve_dir_licitacion"}, rej];
+      if(isCo)       return [rej];
+    }
+    if(estado==="pendiente_firma"){
+      if(isAd||d)    return [{label:"Marcar Contrato Firmado", newEstado:"archivado", color:"emerald"}];
+    }
+    if(estado==="pend_pago"){
+      if(isAd||d)    return [{label:"Marcar Anticipo Pagado", newEstado:"archivado", color:"purple"}];
+    }
   }
 
-  // ACOPIO ───────────────────────────────────────────────────
+  // ── ACOPIO ────────────────────────────────────────────────
   if(tipo==="acopio"){
-    if(estado==="nuevo"&&(isCo||d)) return [{label:"Marcar Cotizado", newEstado:"cotizado", color:"sky"}, rej];
+    if(estado==="nuevo"&&(isCo||d))
+      return [{label:"Marcar Cotizado", newEstado:"cotizado", color:"sky"}, rej];
     if(estado==="cotizado"){
-      if(d)    return [{label:"Aprobar", newEstado:null, color:"green", formType:"approve_dir_acopio"}, rej];
-      if(isCo) return [rej];
+      if(d)          return [{label:"Aprobar", newEstado:null, color:"green", formType:"approve_dir_acopio"}, rej];
+      if(isCo)       return [rej];
     }
-    if(estado==="pendiente_firma"&&(isAd||d)) return [{label:"Marcar Contrato Firmado", newEstado:"archivado", color:"emerald"}];
-    if(estado==="pend_pago"&&(isAd||d))       return [{label:"Marcar Pagado",            newEstado:"archivado", color:"purple"}];
+    if(estado==="pendiente_firma"){
+      if(isAd||d)    return [{label:"Marcar Contrato Firmado", newEstado:"archivado", color:"emerald"}];
+    }
+    if(estado==="pend_pago"){
+      if(isAd||d)    return [{label:"Marcar Pagado", newEstado:"archivado", color:"purple"}];
+    }
   }
 
   return [];
@@ -712,16 +721,21 @@ export default function App(){
 
 // ── Detail View ─────────────────────────────────────────────────
 function DetailView({pedido, user, onSimpleAction, onFormAction, onDelete, onBack, onUpdateMeta}){
-  const [comment, setComment]=useState("");
-  const [fechaRecepcion, setFechaRecepcion]=useState("");
-  const [nroRemito, setNroRemito]=useState("");
-  const [provNombre, setProvNombre]=useState("");
-  const actions=getActions(pedido,user.role);
-  const meta=pedido.metadata||{};
-  const proveedores=meta.proveedores_cotizacion||[];
+  const [comment,        setComment]       = useState("");
+  const [fechaRecepcion, setFechaRecepcion]= useState("");
+  const [nroRemito,      setNroRemito]     = useState("");
+  const [recepTipo,      setRecepTipo]     = useState("total"); // "total" | "parcial"
+  const [recibidoDesc,   setRecibidoDesc]  = useState("");
+  const [pendienteDesc,  setPendienteDesc] = useState("");
+  const [provNombre,     setProvNombre]    = useState("");
+
+  const actions   = getActions(pedido, user.role);
+  const meta      = pedido.metadata||{};
+  const proveedores         = meta.proveedores_cotizacion||[];
+  const recepcionesParciales= meta.recepciones_parciales||[];
 
   const isDeliveryAction = a => ["Marcar Entregado","Marcar Recibido"].includes(a.label);
-  const hasDelivery = actions.some(isDeliveryAction);
+  const hasDelivery  = actions.some(isDeliveryAction);
   const canManageProvs = user.role==="compras"||user.role==="director"||(user.role==="arquitecto"&&pedido.tipo==="licitacion");
   const isActive = ACTIVE_ESTADOS.includes(pedido.estado);
 
@@ -730,20 +744,34 @@ function DetailView({pedido, user, onSimpleAction, onFormAction, onDelete, onBac
   }
   function addProveedor(){
     if(!provNombre.trim()) return;
-    const newProvs=[...proveedores,{id:uid(),nombre:provNombre.trim(),estado:"enviado_a_cotizar",ts:Date.now()}];
-    onUpdateMeta({...meta,proveedores_cotizacion:newProvs});
+    onUpdateMeta({...meta, proveedores_cotizacion:[...proveedores,{id:uid(),nombre:provNombre.trim(),estado:"enviado_a_cotizar",ts:Date.now()}]});
     setProvNombre("");
   }
   function updateProvEstado(id,estado){
-    onUpdateMeta({...meta,proveedores_cotizacion:proveedores.map(p=>p.id===id?{...p,estado}:p)});
+    onUpdateMeta({...meta, proveedores_cotizacion:proveedores.map(p=>p.id===id?{...p,estado}:p)});
   }
   function removeProveedor(id){
-    onUpdateMeta({...meta,proveedores_cotizacion:proveedores.filter(p=>p.id!==id)});
+    onUpdateMeta({...meta, proveedores_cotizacion:proveedores.filter(p=>p.id!==id)});
   }
 
-  const PROV_EST = {
+  function handleDelivery(action){
+    if(!fechaRecepcion){alert("Ingresá la fecha de recepción");return;}
+    if(recepTipo==="parcial"){
+      if(!recibidoDesc.trim()){alert("Detallá qué se recibió");return;}
+      const nuevaRecep={id:uid(),fecha:fechaRecepcion,nro_remito:nroRemito,recibido:recibidoDesc,pendiente:pendienteDesc,ts:Date.now(),usuario:user.name};
+      const extraMeta={recepciones_parciales:[...recepcionesParciales,nuevaRecep]};
+      const parcialAction={label:"Recepción Parcial registrada",newEstado:pedido.estado};
+      onSimpleAction(pedido,parcialAction,`Recibido: ${recibidoDesc}${pendienteDesc?`. Pendiente: ${pendienteDesc}`:""}`,extraMeta);
+    } else {
+      const extra={fecha_recepcion:fechaRecepcion,nro_remito:nroRemito};
+      onSimpleAction(pedido,action,comment,extra);
+    }
+    setFechaRecepcion(""); setNroRemito(""); setRecibidoDesc(""); setPendienteDesc(""); setRecepTipo("total"); setComment("");
+  }
+
+  const PROV_EST={
     enviado_a_cotizar:{label:"Enviado a cotizar",color:"bg-sky-100 text-sky-700"},
-    presup_recibido:{label:"Presup. recibido",color:"bg-green-100 text-green-700"},
+    presup_recibido:  {label:"Presup. recibido", color:"bg-green-100 text-green-700"},
     recibido_con_error:{label:"Recibido con error",color:"bg-red-100 text-red-700"},
   };
 
@@ -775,7 +803,7 @@ function DetailView({pedido, user, onSimpleAction, onFormAction, onDelete, onBac
           </div>
         )}
 
-        {/* Toggle En Proceso — solo compras y directores */}
+        {/* Toggle En Proceso */}
         {(user.role==="compras"||user.role==="director")&&isActive&&(
           <div className="mt-4 flex items-center gap-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
             <button type="button" onClick={toggleEnProceso}
@@ -789,7 +817,7 @@ function DetailView({pedido, user, onSimpleAction, onFormAction, onDelete, onBac
           </div>
         )}
 
-        {/* Datos de la compra (metadata de aprobación) */}
+        {/* Datos de la compra */}
         {meta.proveedor&&(
           <div className="mt-4 bg-blue-50 rounded-lg p-4 border border-blue-100 space-y-1">
             <p className="text-xs font-semibold text-blue-700 mb-2">📋 Datos de la compra</p>
@@ -808,11 +836,34 @@ function DetailView({pedido, user, onSimpleAction, onFormAction, onDelete, onBac
           </div>
         )}
 
-        {/* Datos de recepción */}
+        {/* Recepciones parciales registradas */}
+        {recepcionesParciales.length>0&&(
+          <div className="mt-4 border border-orange-200 rounded-lg overflow-hidden">
+            <div className="bg-orange-50 px-4 py-2 border-b border-orange-200">
+              <p className="text-xs font-semibold text-orange-700">📦 Recepciones parciales ({recepcionesParciales.length})</p>
+            </div>
+            <div className="divide-y divide-orange-100">
+              {recepcionesParciales.map((r,i)=>(
+                <div key={i} className="p-3 text-xs space-y-1">
+                  <div className="flex items-center gap-2 text-slate-500">
+                    <span className="font-medium text-slate-700">Recepción {i+1}</span>
+                    <span>·</span><span>{r.fecha}</span>
+                    {r.nro_remito&&<><span>·</span><span>Remito: {r.nro_remito}</span></>}
+                    <span>·</span><span>{r.usuario}</span>
+                  </div>
+                  <p className="text-green-700"><b>Recibido:</b> {r.recibido}</p>
+                  {r.pendiente&&<p className="text-orange-700"><b>Pendiente:</b> {r.pendiente}</p>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Dato de recepción total */}
         {meta.fecha_recepcion&&(
           <div className="mt-4 bg-green-50 rounded-lg p-4 border border-green-100 space-y-1">
-            <p className="text-xs font-semibold text-green-700 mb-2">📦 Datos de recepción</p>
-            <InfoRow label="Fecha de recepción" val={meta.fecha_recepcion}/>
+            <p className="text-xs font-semibold text-green-700 mb-2">✅ Recepción total</p>
+            <InfoRow label="Fecha" val={meta.fecha_recepcion}/>
             {meta.nro_remito&&<InfoRow label="N° de remito" val={meta.nro_remito}/>}
           </div>
         )}
@@ -839,7 +890,6 @@ function DetailView({pedido, user, onSimpleAction, onFormAction, onDelete, onBac
                   <button onClick={()=>removeProveedor(p.id)} className="text-slate-300 hover:text-red-400 text-xs px-1">✕</button>
                 </div>
               ))}
-              {/* Agregar proveedor */}
               {isActive&&(
                 <div className="flex gap-2 pt-1 border-t border-slate-100">
                   <input className="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-sm"
@@ -857,33 +907,69 @@ function DetailView({pedido, user, onSimpleAction, onFormAction, onDelete, onBac
         {actions.length>0&&(
           <div className="mt-5 border-t border-slate-100 pt-5">
             <h3 className="font-semibold text-slate-700 mb-3">Tu acción requerida</h3>
+
+            {/* Formulario de entrega */}
             {hasDelivery&&(
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4 space-y-3">
-                <p className="text-xs font-semibold text-green-700">📦 Datos de recepción</p>
-                <Fld label="Fecha de recepción *">
-                  <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
-                    value={fechaRecepcion} onChange={e=>setFechaRecepcion(e.target.value)}/>
-                </Fld>
-                <Fld label="N° de remito">
-                  <input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
-                    placeholder="Ej: 0001-00012345"
-                    value={nroRemito} onChange={e=>setNroRemito(e.target.value)}/>
-                </Fld>
+              <div className="border border-slate-200 rounded-lg overflow-hidden mb-4">
+                <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
+                  <p className="text-xs font-semibold text-slate-600">📦 Datos de recepción</p>
+                </div>
+                <div className="p-4 space-y-3">
+                  {/* Tipo de recepción */}
+                  <div className="flex gap-2">
+                    {[["total","✅ Recepción Total"],["parcial","⚠️ Recepción Parcial"]].map(([v,l])=>(
+                      <button key={v} type="button" onClick={()=>setRecepTipo(v)}
+                        className={`flex-1 py-2 rounded-lg text-sm font-medium border-2 transition ${recepTipo===v?(v==="total"?"border-green-500 bg-green-50 text-green-700":"border-orange-400 bg-orange-50 text-orange-700"):"border-slate-200 text-slate-400"}`}>
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <Fld label="Fecha de recepción *">
+                      <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                        value={fechaRecepcion} onChange={e=>setFechaRecepcion(e.target.value)}/>
+                    </Fld>
+                    <Fld label="N° de remito">
+                      <input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                        placeholder="0001-00012345"
+                        value={nroRemito} onChange={e=>setNroRemito(e.target.value)}/>
+                    </Fld>
+                  </div>
+
+                  {recepTipo==="parcial"&&(
+                    <>
+                      <Fld label="¿Qué se recibió? *">
+                        <textarea className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" rows={2}
+                          placeholder="Detallá los items o cantidades recibidas..."
+                          value={recibidoDesc} onChange={e=>setRecibidoDesc(e.target.value)}/>
+                      </Fld>
+                      <Fld label="¿Qué queda pendiente?">
+                        <textarea className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" rows={2}
+                          placeholder="Detallá los items o cantidades que faltan..."
+                          value={pendienteDesc} onChange={e=>setPendienteDesc(e.target.value)}/>
+                      </Fld>
+                    </>
+                  )}
+                </div>
               </div>
             )}
-            {!actions.some(a=>a.formType)&&(
+
+            {!actions.some(a=>a.formType)&&!hasDelivery&&(
               <textarea className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none mb-3" rows={2}
                 placeholder="Comentario opcional..." value={comment} onChange={e=>setComment(e.target.value)}/>
             )}
+
             <div className="flex flex-wrap gap-2">
               {actions.map(a=>(
                 <button key={a.label} onClick={()=>{
                   if(a.formType){onFormAction(a);return;}
-                  if(isDeliveryAction(a)&&!fechaRecepcion){alert("Ingresá la fecha de recepción");return;}
-                  const extra=isDeliveryAction(a)?{fecha_recepcion:fechaRecepcion,nro_remito:nroRemito}:{};
-                  onSimpleAction(pedido,a,comment,extra).then(()=>{setComment("");setFechaRecepcion("");setNroRemito("");});
+                  if(isDeliveryAction(a)){handleDelivery(a);return;}
+                  onSimpleAction(pedido,a,comment).then(()=>setComment(""));
                 }} className={`px-4 py-2 rounded-lg text-sm font-medium transition ${BC[a.color]}`}>
-                  {a.label}
+                  {isDeliveryAction(a)&&hasDelivery
+                    ? recepTipo==="parcial" ? "Registrar Recepción Parcial" : a.label
+                    : a.label}
                 </button>
               ))}
             </div>
