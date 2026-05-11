@@ -3,266 +3,192 @@ import { useState, useEffect } from "react";
 
 const SB_URL = "https://glgoidruquyjzorbcqxb.supabase.co";
 const SB_KEY = "sb_publishable_ahdlCn7ySRvvKHyS7n02Hg_X0AprYS6";
-const H = { "apikey":SB_KEY, "Authorization":`Bearer ${SB_KEY}`, "Content-Type":"application/json", "Prefer":"return=representation" };
+const H = {"apikey":SB_KEY,"Authorization":`Bearer ${SB_KEY}`,"Content-Type":"application/json","Prefer":"return=representation"};
 const sb = {
-  get:   async (t,q="")  => { const r=await fetch(`${SB_URL}/rest/v1/${t}?select=*${q}`,{headers:H}); if(!r.ok) throw new Error(await r.text()); return r.json(); },
-  post:  async (t,d)     => { const r=await fetch(`${SB_URL}/rest/v1/${t}`,{method:"POST",headers:H,body:JSON.stringify(d)}); if(!r.ok) throw new Error(await r.text()); return r.json(); },
-  patch: async (t,id,d)  => { const r=await fetch(`${SB_URL}/rest/v1/${t}?id=eq.${encodeURIComponent(id)}`,{method:"PATCH",headers:H,body:JSON.stringify(d)}); if(!r.ok) throw new Error(await r.text()); return r.json(); },
-  del:   async (t,id)    => { const r=await fetch(`${SB_URL}/rest/v1/${t}?id=eq.${encodeURIComponent(id)}`,{method:"DELETE",headers:H}); if(!r.ok) throw new Error(await r.text()); },
+  get:   async(t,q="") => { const r=await fetch(`${SB_URL}/rest/v1/${t}?select=*${q}`,{headers:H}); if(!r.ok)throw new Error(await r.text()); return r.json(); },
+  post:  async(t,d)    => { const r=await fetch(`${SB_URL}/rest/v1/${t}`,{method:"POST",headers:H,body:JSON.stringify(d)}); if(!r.ok)throw new Error(await r.text()); return r.json(); },
+  patch: async(t,id,d) => { const r=await fetch(`${SB_URL}/rest/v1/${t}?id=eq.${encodeURIComponent(id)}`,{method:"PATCH",headers:H,body:JSON.stringify(d)}); if(!r.ok)throw new Error(await r.text()); return r.json(); },
+  del:   async(t,id)   => { const r=await fetch(`${SB_URL}/rest/v1/${t}?id=eq.${encodeURIComponent(id)}`,{method:"DELETE",headers:H}); if(!r.ok)throw new Error(await r.text()); },
 };
-const mapP = p => ({...p, obraId:p.obra_id, obraNombre:p.obra_nombre, fechaEntrega:p.fecha_entrega, historial:p.historial||[], metadata:p.metadata||{}});
+const mapP = p=>({...p,obraId:p.obra_id,obraNombre:p.obra_nombre,fechaEntrega:p.fecha_entrega,historial:p.historial||[],metadata:p.metadata||{}});
 
-// ── Constants ──────────────────────────────────────────────────
-const RL = { director:"Director", jefe_obra:"Jefe de Obra", arquitecto:"Arquitecto", compras:"Compras", admin:"Administración" };
-const RO = ["director","jefe_obra","arquitecto","compras","admin"];
-const TL = { compra_chica:"Compra Chica", compra_grande:"Compra Grande", licitacion:"Licitación", acopio:"Acopio" };
-const TC = { compra_chica:"CC", compra_grande:"CG", licitacion:"LC", acopio:"AC" };
-const TIPO_CLR = {
-  compra_chica:"bg-amber-100 text-amber-800 border-amber-200",
-  compra_grande:"bg-orange-100 text-orange-800 border-orange-200",
-  licitacion:"bg-blue-100 text-blue-800 border-blue-200",
-  acopio:"bg-purple-100 text-purple-800 border-purple-200",
+// ── Design tokens ──────────────────────────────────────────────
+const G="#1B7B74", TX="#111111", TM="#777777", BG="#FAFAF8", CB="#FFFFFF", BD="#E5E0DA";
+const css = {
+  card:  {background:CB,border:`1px solid ${BD}`},
+  lbl:   {fontSize:10,letterSpacing:"0.13em",textTransform:"uppercase",fontWeight:700,fontFamily:"inherit"},
+  input: {width:"100%",border:`1px solid ${BD}`,padding:"10px 12px",fontSize:13,fontFamily:"inherit",outline:"none",background:"#fff",boxSizing:"border-box"},
+  ta:    {width:"100%",border:`1px solid ${BD}`,padding:"10px 12px",fontSize:13,fontFamily:"inherit",outline:"none",background:"#fff",resize:"none",boxSizing:"border-box"},
 };
-const EL = {
-  nuevo:"Nuevo", doc_lista:"Documentación Lista", cotizado:"Cotizado", desacopiado:"Desacopiado",
-  pendiente_dir:"Pend. Aprobación Dir.", pend_pago:"Pendiente Pago",
-  pend_pago_anticipo:"Pend. Pago Anticipo", pend_entrega:"Pendiente Entrega",
-  pend_pago_saldo:"Pend. Saldo", pendiente_firma:"Pend. Firma Contrato",
-  rechazado:"Rechazado", archivado:"Archivado",
+const TIPOS = {
+  compra_chica: {label:"Compra Chica",  code:"CC",color:"#C47820"},
+  compra_grande:{label:"Compra Grande", code:"CG",color:"#8B4513"},
+  licitacion:   {label:"Licitación",    code:"LC",color:G},
+  acopio:       {label:"Acopio",        code:"AC",color:"#6B4B8F"},
 };
-const EC = {
-  nuevo:"bg-yellow-100 text-yellow-800", doc_lista:"bg-indigo-100 text-indigo-800", cotizado:"bg-sky-100 text-sky-800",
-  desacopiado:"bg-teal-100 text-teal-800", pendiente_dir:"bg-orange-100 text-orange-800",
-  pend_pago:"bg-violet-100 text-violet-800", pend_pago_anticipo:"bg-violet-100 text-violet-800",
-  pend_entrega:"bg-green-100 text-green-800", pend_pago_saldo:"bg-violet-100 text-violet-800",
-  pendiente_firma:"bg-emerald-100 text-emerald-800",
-  rechazado:"bg-red-100 text-red-800", archivado:"bg-slate-100 text-slate-500",
+const ESTADOS = {
+  nuevo:             {label:"NUEVO",           color:"#C47820"},
+  doc_lista:         {label:"DOC. LISTA",      color:G},
+  cotizado:          {label:"COTIZADO",        color:G},
+  desacopiado:       {label:"DESACOPIADO",     color:G},
+  pendiente_dir:     {label:"PEND. DIRECCIÓN", color:"#C47820"},
+  pend_pago:         {label:"PEND. PAGO",      color:"#6B4B8F"},
+  pend_pago_anticipo:{label:"PEND. ANTICIPO",  color:"#6B4B8F"},
+  pend_entrega:      {label:"PEND. ENTREGA",   color:"#2D7A3A"},
+  pend_pago_saldo:   {label:"PEND. SALDO",     color:"#6B4B8F"},
+  pendiente_firma:   {label:"PEND. FIRMA",     color:"#2D7A3A"},
+  rechazado:         {label:"RECHAZADO",       color:"#CC3333"},
+  archivado:         {label:"ARCHIVADO",       color:TM},
 };
-const BC = {
-  green:"bg-green-600 hover:bg-green-700 text-white", red:"bg-red-500 hover:bg-red-600 text-white",
-  sky:"bg-sky-600 hover:bg-sky-700 text-white", purple:"bg-purple-600 hover:bg-purple-700 text-white",
-  emerald:"bg-emerald-600 hover:bg-emerald-700 text-white", teal:"bg-teal-600 hover:bg-teal-700 text-white",
+const URG = {bajo:{label:"↓ BAJO",color:"#2D7A3A"},medio:{label:"→ MEDIO",color:"#C47820"},alto:{label:"↑ ALTO",color:"#CC3333"}};
+const btnS = (v="primary",extra={})=>{
+  const base={border:"none",padding:"10px 18px",fontSize:11,letterSpacing:"0.12em",textTransform:"uppercase",fontWeight:700,cursor:"pointer",fontFamily:"inherit",...extra};
+  const map={primary:{background:TX,color:"#fff"},outline:{background:"transparent",color:TX,border:`1px solid ${TX}`},green:{background:G,color:"#fff"},
+    "outline-green":{background:"transparent",color:G,border:`1px solid ${G}`},danger:{background:"transparent",color:"#CC3333",border:"1px solid #CC3333"},
+    purple:{background:"#6B4B8F",color:"#fff"},forest:{background:"#2D7A3A",color:"#fff"},amber:{background:"#C47820",color:"#fff"},
+    indigo:{background:"transparent",color:"#4B5EA0",border:"1px solid #4B5EA0"},teal:{background:G,color:"#fff"},ghost:{background:"transparent",color:TM,border:"none"}};
+  return {...base,...(map[v]||map.primary)};
 };
-const UC = { bajo:"bg-green-100 text-green-700", medio:"bg-yellow-100 text-yellow-700", alto:"bg-red-100 text-red-700" };
-const CREATE_PERMS = {
-  director:["compra_chica","compra_grande","licitacion","acopio"],
-  jefe_obra:["compra_chica","compra_grande","licitacion"],
-  arquitecto:["compra_chica","compra_grande","licitacion"],
-  compras:[], admin:[],
-};
-const ACTIVE_ESTADOS = ["nuevo","doc_lista", "cotizado","desacopiado","pendiente_dir","pend_pago","pend_pago_anticipo","pend_entrega","pend_pago_saldo","pendiente_firma"];
-const fmtDate = ts => new Date(ts).toLocaleString("es-AR",{dateStyle:"short",timeStyle:"short"});
-const fmtMoney = n => n ? new Intl.NumberFormat("es-AR",{style:"currency",currency:"ARS",minimumFractionDigits:0}).format(Number(n)) : "";
+const ACT_BTN={green:"green",red:"danger",sky:"outline-green",purple:"purple",emerald:"forest",teal:"teal",indigo:"indigo",amber:"amber"};
+
+// ── Logic constants ────────────────────────────────────────────
+const RL={director:"Director",jefe_obra:"Jefe de Obra",arquitecto:"Arquitecto",compras:"Compras",admin:"Administración"};
+const RO=["director","jefe_obra","arquitecto","compras","admin"];
+const TL={compra_chica:"Compra Chica",compra_grande:"Compra Grande",licitacion:"Licitación",acopio:"Acopio"};
+const TC={compra_chica:"CC",compra_grande:"CG",licitacion:"LC",acopio:"AC"};
+const CREATE_PERMS={director:["compra_chica","compra_grande","licitacion","acopio"],jefe_obra:["compra_chica","compra_grande","licitacion"],arquitecto:["compra_chica","compra_grande","licitacion"],compras:[],admin:[]};
+const ACTIVE_ESTADOS=["nuevo","doc_lista","cotizado","desacopiado","pendiente_dir","pend_pago","pend_pago_anticipo","pend_entrega","pend_pago_saldo","pendiente_firma"];
+
+const fmtDate=ts=>new Date(ts).toLocaleString("es-AR",{dateStyle:"short",timeStyle:"short"});
+const fmtMoney=n=>n?new Intl.NumberFormat("es-AR",{style:"currency",currency:"ARS",minimumFractionDigits:0}).format(Number(n)):"";
 function addBD(d,n){let r=new Date(d),a=0;while(a<n){r.setDate(r.getDate()+1);if(r.getDay()!==0&&r.getDay()!==6)a++;}return r;}
-const minDel = () => addBD(new Date(),2).toISOString().slice(0,10);
-function getRef(cod,tipo,pedidos,obraId){
-  const fecha=new Date().toISOString().slice(0,10).replace(/-/g,"");
-  const n=pedidos.filter(p=>p.obraId===obraId&&p.tipo===tipo).length+1;
-  return `#${cod}_${fecha}_${TC[tipo]}_${n}`;
-}
-const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+const minDel=()=>addBD(new Date(),2).toISOString().slice(0,10);
+function getRef(cod,tipo,pedidos,obraId){const fecha=new Date().toISOString().slice(0,10).replace(/-/g,"");const n=pedidos.filter(p=>p.obraId===obraId&&p.tipo===tipo).length+1;return `#${cod}_${fecha}_${TC[tipo]}_${n}`;}
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 
 // ── State machine ──────────────────────────────────────────────
-function getActions(pedido, role) {
-  const {tipo, estado} = pedido;
-  const meta = pedido.metadata||{};
-  const d=role==="director", isCo=role==="compras", isAd=role==="admin",
-        isOb=role==="jefe_obra", isAr=role==="arquitecto";
-  if(["rechazado","archivado"].includes(estado)) return [];
-  const rej = {label:"Rechazar", newEstado:"rechazado", color:"red"};
-  const canDeliver = isOb||isCo||d; // obra, compras y directores pueden marcar entrega
-
-  // ── COMPRA CHICA ──────────────────────────────────────────
+function getActions(pedido,role){
+  const{tipo,estado}=pedido;const meta=pedido.metadata||{};
+  const d=role==="director",isCo=role==="compras",isAd=role==="admin",isOb=role==="jefe_obra",isAr=role==="arquitecto";
+  if(["rechazado","archivado"].includes(estado))return[];
+  const rej={label:"Rechazar",newEstado:"rechazado",color:"red"};
+  const canDeliver=isOb||isCo||d;
   if(tipo==="compra_chica"){
-    if(estado==="nuevo"&&(isCo||d)) return [
-      {label:"Aprobar Compra", newEstado:null, color:"green", formType:"approve_cc"},
-      {label:"Desacopiar",     newEstado:"desacopiado", color:"teal"},
-      rej,
-    ];
-    if(estado==="desacopiado"&&canDeliver)
-      return [{label:"Marcar Entregado", newEstado:"archivado", color:"green"}];
-    if(estado==="pendiente_dir"){
-      if(d)   return [{label:"Confirmar Aprobación", newEstado:null, color:"green", formType:"approve_cc_dir"}, rej];
-      if(isCo) return [rej];
-    }
-    if(estado==="pend_pago"&&(isAd||d)){
-      const next = meta.route==="anticipado" ? "pend_entrega" : "archivado";
-      return [{label:"Marcar Pagado", newEstado:next, color:"purple"}];
-    }
-    if(estado==="pend_entrega"&&canDeliver){
-      if(meta.route==="anticipado") return [{label:"Marcar Recibido", newEstado:"archivado", color:"green"}];
-      return [{label:"Marcar Entregado", newEstado:"pend_pago", color:"green"}];
-    }
+    if(estado==="nuevo"&&(isCo||d))return[{label:"Aprobar Compra",newEstado:null,color:"green",formType:"approve_cc"},{label:"Desacopiar",newEstado:"desacopiado",color:"teal"},rej];
+    if(estado==="desacopiado"&&canDeliver)return[{label:"Marcar Entregado",newEstado:"archivado",color:"green"}];
+    if(estado==="pendiente_dir"){if(d)return[{label:"Confirmar Aprobación",newEstado:null,color:"green",formType:"approve_cc_dir"},rej];if(isCo)return[rej];}
+    if(estado==="pend_pago"&&(isAd||d)){const next=meta.route==="anticipado"?"pend_entrega":"archivado";return[{label:"Marcar Pagado",newEstado:next,color:"purple"}];}
+    if(estado==="pend_entrega"&&canDeliver){if(meta.route==="anticipado")return[{label:"Marcar Recibido",newEstado:"archivado",color:"green"}];return[{label:"Marcar Entregado",newEstado:"pend_pago",color:"green"}];}
   }
-
-  // ── COMPRA GRANDE ─────────────────────────────────────────
   if(tipo==="compra_grande"){
-    if(estado==="nuevo"&&(isCo||d)) return [
-      {label:"Marcar Cotizado", newEstado:"cotizado",    color:"sky"},
-      {label:"Desacopiar",      newEstado:"desacopiado", color:"teal"},
-      rej,
-    ];
-    if(estado==="cotizado"){
-      if(d)    return [{label:"Aprobar", newEstado:null, color:"green", formType:"approve_dir_grande"}, rej];
-      if(isCo) return [rej];
-    }
-    if(estado==="desacopiado"&&canDeliver)
-      return [{label:"Marcar Entregado", newEstado:"archivado", color:"green"}];
-    if(estado==="pend_pago_anticipo"&&(isAd||d))
-      return [{label:"Marcar Anticipo Pagado", newEstado:"pend_entrega", color:"purple"}];
-    if(estado==="pend_entrega"&&canDeliver){
-      if(meta.route==="anticipado")   return [{label:"Marcar Recibido",  newEstado:"archivado",       color:"green"}];
-      if(meta.route==="pago_parcial") return [{label:"Marcar Entregado", newEstado:"pend_pago_saldo",  color:"green"}];
-      return [{label:"Marcar Entregado", newEstado:"pend_pago", color:"green"}];
-    }
-    if(estado==="pend_pago"&&(isAd||d)){
-      const next = meta.route==="anticipado" ? "pend_entrega" : "archivado";
-      return [{label:"Marcar Pagado", newEstado:next, color:"purple"}];
-    }
-    if(estado==="pend_pago_saldo"&&(isAd||d))
-      return [{label:"Marcar Saldo Pagado", newEstado:"archivado", color:"purple"}];
+    if(estado==="nuevo"&&(isCo||d))return[{label:"Marcar Cotizado",newEstado:"cotizado",color:"sky"},{label:"Desacopiar",newEstado:"desacopiado",color:"teal"},rej];
+    if(estado==="cotizado"){if(d)return[{label:"Aprobar",newEstado:null,color:"green",formType:"approve_dir_grande"},rej];if(isCo)return[rej];}
+    if(estado==="desacopiado"&&canDeliver)return[{label:"Marcar Entregado",newEstado:"archivado",color:"green"}];
+    if(estado==="pend_pago_anticipo"&&(isAd||d))return[{label:"Marcar Anticipo Pagado",newEstado:"pend_entrega",color:"purple"}];
+    if(estado==="pend_entrega"&&canDeliver){if(meta.route==="anticipado")return[{label:"Marcar Recibido",newEstado:"archivado",color:"green"}];if(meta.route==="pago_parcial")return[{label:"Marcar Entregado",newEstado:"pend_pago_saldo",color:"green"}];return[{label:"Marcar Entregado",newEstado:"pend_pago",color:"green"}];}
+    if(estado==="pend_pago"&&(isAd||d)){const next=meta.route==="anticipado"?"pend_entrega":"archivado";return[{label:"Marcar Pagado",newEstado:next,color:"purple"}];}
+    if(estado==="pend_pago_saldo"&&(isAd||d))return[{label:"Marcar Saldo Pagado",newEstado:"archivado",color:"purple"}];
   }
-
-  // ── LICITACIÓN ────────────────────────────────────────────
   if(tipo==="licitacion"){
-    if(estado==="nuevo"){
-      if(isAr)       return [{label:"Documentación Lista", newEstado:"doc_lista", color:"indigo"}];
-      if(isCo||d)    return [rej];
-    }
-    if(estado==="doc_lista"){
-      if(isCo||d)    return [{label:"Marcar Cotizado", newEstado:"cotizado", color:"sky"}, rej];
-    }
-    if(estado==="cotizado"){
-      if(d)          return [{label:"Aprobar", newEstado:null, color:"green", formType:"approve_dir_licitacion"}, rej];
-      if(isCo)       return [rej];
-    }
-    if(estado==="pendiente_firma"){
-      if(isAd||d)    return [{label:"Marcar Contrato Firmado", newEstado:"archivado", color:"emerald"}];
-    }
-    if(estado==="pend_pago"){
-      if(isAd||d)    return [{label:"Marcar Anticipo Pagado", newEstado:"archivado", color:"purple"}];
-    }
+    if(estado==="nuevo"){if(isAr)return[{label:"Documentación Lista",newEstado:"doc_lista",color:"indigo"}];if(isCo||d)return[rej];}
+    if(estado==="doc_lista"&&(isCo||d))return[{label:"Marcar Cotizado",newEstado:"cotizado",color:"sky"},rej];
+    if(estado==="cotizado"){if(d)return[{label:"Aprobar",newEstado:null,color:"green",formType:"approve_dir_licitacion"},rej];if(isCo)return[rej];}
+    if(estado==="pendiente_firma"&&(isAd||d))return[{label:"Marcar Contrato Firmado",newEstado:"archivado",color:"emerald"}];
+    if(estado==="pend_pago"&&(isAd||d))return[{label:"Marcar Anticipo Pagado",newEstado:"archivado",color:"purple"}];
   }
-
-  // ── ACOPIO ────────────────────────────────────────────────
   if(tipo==="acopio"){
-    if(estado==="nuevo"&&(isCo||d))
-      return [{label:"Marcar Cotizado", newEstado:"cotizado", color:"sky"}, rej];
-    if(estado==="cotizado"){
-      if(d)          return [{label:"Aprobar", newEstado:null, color:"green", formType:"approve_dir_acopio"}, rej];
-      if(isCo)       return [rej];
-    }
-    if(estado==="pendiente_firma"){
-      if(isAd||d)    return [{label:"Marcar Contrato Firmado", newEstado:"archivado", color:"emerald"}];
-    }
-    if(estado==="pend_pago"){
-      if(isAd||d)    return [{label:"Marcar Pagado", newEstado:"archivado", color:"purple"}];
-    }
+    if(estado==="nuevo"&&(isCo||d))return[{label:"Marcar Cotizado",newEstado:"cotizado",color:"sky"},rej];
+    if(estado==="cotizado"){if(d)return[{label:"Aprobar",newEstado:null,color:"green",formType:"approve_dir_acopio"},rej];if(isCo)return[rej];}
+    if(estado==="pendiente_firma"&&(isAd||d))return[{label:"Marcar Contrato Firmado",newEstado:"archivado",color:"emerald"}];
+    if(estado==="pend_pago"&&(isAd||d))return[{label:"Marcar Pagado",newEstado:"archivado",color:"purple"}];
   }
-
-  return [];
+  return[];
 }
-const isPending = (p,role) => getActions(p,role).length>0;
+const isPending=(p,role)=>getActions(p,role).length>0;
 
-// ── Form submit logic ──────────────────────────────────────────
-function resolveAction(action, pedido, form) {
-  const ft = action.formType;
-  let newEstado, newMeta = {...(pedido.metadata||{})};
-
+function resolveAction(action,pedido,form){
+  const ft=action.formType;let newEstado,newMeta={...(pedido.metadata||{})};
   if(ft==="approve_cc"){
-    const monto = parseFloat(form.monto)||0;
-    Object.assign(newMeta, {
-      proveedor:form.proveedor, contacto_nombre:form.contacto_nombre, contacto_tel:form.contacto_tel,
-      monto, info_pago:form.info_pago, info_entrega:form.info_entrega,
-      tipo_pago:form.tipo_pago, route:form.tipo_pago,
-    });
-    if(monto > 4_000_000)             newEstado="pendiente_dir";
-    else if(form.tipo_pago==="anticipado")  newEstado="pend_pago";
-    else                                    newEstado="pend_entrega";
+    const monto=parseFloat(form.monto)||0;
+    Object.assign(newMeta,{proveedor:form.proveedor,contacto_nombre:form.contacto_nombre,contacto_tel:form.contacto_tel,monto,info_pago:form.info_pago,info_entrega:form.info_entrega,tipo_pago:form.tipo_pago,route:form.tipo_pago});
+    if(monto>4_000_000)newEstado="pendiente_dir";
+    else if(form.tipo_pago==="anticipado")newEstado="pend_pago";
+    else newEstado="pend_entrega";
+  }else if(ft==="approve_cc_dir"){
+    newEstado=pedido.metadata?.route==="anticipado"?"pend_pago":"pend_entrega";
+  }else if(ft==="approve_dir_grande"){
+    Object.assign(newMeta,{proveedor:form.proveedor,contacto_nombre:form.contacto_nombre,contacto_tel:form.contacto_tel,condiciones_pago:form.condiciones_pago,condiciones_entrega:form.condiciones_entrega,tipo_pago:form.tipo_pago,route:form.tipo_pago});
+    if(form.tipo_pago==="pago_parcial")newEstado="pend_pago_anticipo";
+    else if(form.tipo_pago==="anticipado")newEstado="pend_pago";
+    else newEstado="pend_entrega";
+  }else if(ft==="approve_dir_licitacion"||ft==="approve_dir_acopio"){
+    Object.assign(newMeta,{proveedor:form.proveedor,contacto_nombre:form.contacto_nombre,contacto_tel:form.contacto_tel,contacto_mail:form.contacto_mail,firma_contrato:form.firma_contrato,anexos:form.anexos,condiciones_pago:form.condiciones_pago,condiciones_entrega:form.condiciones_entrega});
+    newEstado=form.firma_contrato?"pendiente_firma":"pend_pago";
   }
-  else if(ft==="approve_cc_dir"){
-    const route = pedido.metadata?.route;
-    newEstado = route==="anticipado" ? "pend_pago" : "pend_entrega";
-  }
-  else if(ft==="approve_dir_grande"){
-    Object.assign(newMeta, {
-      proveedor:form.proveedor, contacto_nombre:form.contacto_nombre, contacto_tel:form.contacto_tel,
-      condiciones_pago:form.condiciones_pago, condiciones_entrega:form.condiciones_entrega,
-      tipo_pago:form.tipo_pago, route:form.tipo_pago,
-    });
-    if(form.tipo_pago==="pago_parcial")  newEstado="pend_pago_anticipo";
-    else if(form.tipo_pago==="anticipado") newEstado="pend_pago";
-    else                                   newEstado="pend_entrega";
-  }
-  else if(ft==="approve_dir_licitacion"||ft==="approve_dir_acopio"){
-    Object.assign(newMeta, {
-      proveedor:form.proveedor, contacto_nombre:form.contacto_nombre,
-      contacto_tel:form.contacto_tel, contacto_mail:form.contacto_mail,
-      firma_contrato:form.firma_contrato, anexos:form.anexos,
-      condiciones_pago:form.condiciones_pago, condiciones_entrega:form.condiciones_entrega,
-    });
-    newEstado = form.firma_contrato ? "pendiente_firma" : "pend_pago";
-  }
-
-  return {newEstado, newMeta};
+  return{newEstado,newMeta};
 }
 
-// ── Main App ───────────────────────────────────────────────────
-const emptyNew={tipo:"",titulo:"",obraId:"",descripcion:"",fechaEntrega:"",urgencia:""};
+// ── State defaults ─────────────────────────────────────────────
+const emptyNew={tipo:"",titulo:"",obraId:"",descripcion:"",fechaEntrega:"",urgencia:"",docLista:false,proveedores:[],provNuevo:""};
 const emptyObra={nombre:"",codigo:"",direccion:""};
-const emptyDashF={tipo:"",estado:"",obraId:"",archivo:"no"};
 const emptyUser={name:"",username:"",password:"",role:"jefe_obra",activo:true};
 
+// Logo con la "u" estilizada (portada)
+function SueloLogo({size=56, color="#fff"}) {
+  return (
+    <div style={{display:"inline-flex",alignItems:"flex-end",userSelect:"none",lineHeight:1}}>
+      <span style={{fontFamily:"'Inter',system-ui,sans-serif",fontWeight:900,fontSize:size,color,letterSpacing:-size*0.03,lineHeight:1}}>S</span>
+      {/* "u" como dos barras verticales — estilo del logo */}
+      <svg viewBox="0 0 58 72" style={{width:size*0.58,height:size*0.76,marginBottom:size*0.05}} fill={color}>
+        <rect x="1"  y="0" width="17" height="58" rx="2"/>
+        <rect x="40" y="0" width="17" height="58" rx="2"/>
+        <rect x="1"  y="47" width="56" height="13" rx="2"/>
+      </svg>
+      <span style={{fontFamily:"'Inter',system-ui,sans-serif",fontWeight:900,fontSize:size,color,letterSpacing:-size*0.03,lineHeight:1}}>elo</span>
+    </div>
+  );
+}
+
+// ── App ────────────────────────────────────────────────────────
 export default function App(){
-  const [users,   setUsers]   = useState([]);
-  const [user,    setUser]    = useState(null);
-  const [pedidos, setPedidos] = useState([]);
-  const [obras,   setObras]   = useState([]);
-  const [loaded,  setLoaded]  = useState(false);
-  const [loadErr, setLoadErr] = useState("");
-  const [view,    setView]    = useState("dashboard");
-  const [sel,     setSel]     = useState(null);
-  const [loginF,  setLoginF]  = useState({username:"",password:""});
-  const [loginErr,setLoginErr]= useState("");
-  const [newForm, setNewForm] = useState(emptyNew);
-  const [newErr,  setNewErr]  = useState("");
-  const [saving,  setSaving]  = useState(false);
-  const [obraF,   setObraF]   = useState(emptyObra);
-  const [obraErr, setObraErr] = useState("");
-  const [showObraF,setShowObraF]=useState(false);
-  const [dashF,   setDashF]   = useState(emptyDashF);
-  const [allF,    setAllF]    = useState({...emptyDashF, archivo:"todos"});
-  const [editUser, setEditUser] = useState(null);
-  const [userForm, setUserForm] = useState(emptyUser);
-  const [userErr,  setUserErr]  = useState("");
-  const [showPass, setShowPass] = useState(false);
-  const [showDemo, setShowDemo] = useState(false);
-  const [actionModal, setActionModal] = useState(null); // {action, pedido}
-  const [delConfirm,  setDelConfirm]  = useState(null);
+  const[users,setUsers]=useState([]);
+  const[user,setUser]=useState(null);
+  const[pedidos,setPedidos]=useState([]);
+  const[obras,setObras]=useState([]);
+  const[loaded,setLoaded]=useState(false);
+  const[loadErr,setLoadErr]=useState("");
+  const[view,setView]=useState("dashboard");
+  const[sel,setSel]=useState(null);
+  const[loginF,setLoginF]=useState({username:"",password:""});
+  const[loginErr,setLoginErr]=useState("");
+  const[newForm,setNewForm]=useState(emptyNew);
+  const[newErr,setNewErr]=useState("");
+  const[saving,setSaving]=useState(false);
+  const[obraF,setObraF]=useState(emptyObra);
+  const[obraErr,setObraErr]=useState("");
+  const[showObraF,setShowObraF]=useState(false);
+  const[dashF,setDashF]=useState({tipo:"",obraId:""});
+  const[allF,setAllF]=useState({tipo:"",estado:"",obraId:"",archivo:"activos"});
+  const[editUser,setEditUser]=useState(null);
+  const[userForm,setUserForm]=useState(emptyUser);
+  const[userErr,setUserErr]=useState("");
+  const[showPass,setShowPass]=useState(false);
+  const[showDemo,setShowDemo]=useState(false);
+  const[actionModal,setActionModal]=useState(null);
+  const[delConfirm,setDelConfirm]=useState(null);
 
   useEffect(()=>{
     (async()=>{
-      try{
-        const [u,o,p]=await Promise.all([
-          sb.get("usuarios"),
-          sb.get("obras"),
-          sb.get("pedidos","&order=creado_at.desc"),
-        ]);
-        setUsers(u); setObras(o); setPedidos(p.map(mapP));
-      }catch(e){ setLoadErr("No se pudo conectar con la base de datos."); }
+      try{const[u,o,p]=await Promise.all([sb.get("usuarios"),sb.get("obras"),sb.get("pedidos","&order=creado_at.desc")]);setUsers(u);setObras(o);setPedidos(p.map(mapP));}
+      catch(e){setLoadErr("No se pudo conectar con la base de datos.");}
       setLoaded(true);
     })();
   },[]);
 
-  const login=()=>{
-    const u=users.find(u=>u.username===loginF.username.trim()&&u.password===loginF.password&&u.activo!==false);
-    if(!u){setLoginErr("Usuario o contraseña incorrectos");return;}
-    setUser(u);setLoginErr("");
-  };
+  const login=()=>{const u=users.find(u=>u.username===loginF.username.trim()&&u.password===loginF.password&&u.activo!==false);if(!u){setLoginErr("Usuario o contraseña incorrectos");return;}setUser(u);setLoginErr("");};
   const logout=()=>{setUser(null);setView("dashboard");setSel(null);};
-  const nav=(v)=>{setView(v);setSel(null);};
+  const nav=v=>{setView(v);setSel(null);};
 
-  // User CRUD
   function openNewUser(){setUserForm(emptyUser);setUserErr("");setShowPass(true);setEditUser({});}
   function openEditUser(u){setUserForm({name:u.name,username:u.username,password:"",role:u.role,activo:u.activo});setUserErr("");setShowPass(false);setEditUser(u);}
   async function saveUser(){
@@ -274,42 +200,25 @@ export default function App(){
     if(users.find(u=>u.username===username&&u.id!==editUser.id)){setUserErr("Ese usuario ya existe");return;}
     setSaving(true);
     try{
-      if(isNew){
-        const d={id:uid(),name,username,password:userForm.password,role:userForm.role,activo:true};
-        await sb.post("usuarios",d);setUsers(prev=>[...prev,d]);
-      }else{
-        const d={name,username,role:userForm.role,activo:userForm.activo,...(userForm.password?{password:userForm.password}:{})};
-        await sb.patch("usuarios",editUser.id,d);
-        setUsers(prev=>prev.map(u=>u.id===editUser.id?{...u,...d}:u));
-        if(user.id===editUser.id)setUser(prev=>({...prev,name,username,role:userForm.role}));
-      }
+      if(isNew){const d={id:uid(),name,username,password:userForm.password,role:userForm.role,activo:true};await sb.post("usuarios",d);setUsers(prev=>[...prev,d]);}
+      else{const d={name,username,role:userForm.role,activo:userForm.activo,...(userForm.password?{password:userForm.password}:{})};await sb.patch("usuarios",editUser.id,d);setUsers(prev=>prev.map(u=>u.id===editUser.id?{...u,...d}:u));if(user.id===editUser.id)setUser(prev=>({...prev,name,username,role:userForm.role}));}
       setEditUser(null);setUserErr("");
     }catch(e){setUserErr("Error al guardar.");}
     setSaving(false);
   }
-  async function toggleActive(u){
-    if(u.id===user.id)return;
-    const a=!u.activo;
-    await sb.patch("usuarios",u.id,{activo:a});
-    setUsers(prev=>prev.map(x=>x.id===u.id?{...x,activo:a}:x));
-  }
+  async function toggleActive(u){if(u.id===user.id)return;const a=!u.activo;await sb.patch("usuarios",u.id,{activo:a});setUsers(prev=>prev.map(x=>x.id===u.id?{...x,activo:a}:x));}
 
-  // Obras
   async function saveObra(){
     const nombre=obraF.nombre.trim(),codigo=obraF.codigo.trim().toUpperCase();
     if(!nombre||!codigo){setObraErr("Nombre y código son obligatorios");return;}
     if(codigo.length<2||codigo.length>5){setObraErr("Código: 2-5 caracteres");return;}
-    if(obras.find(o=>o.codigo===codigo)){setObraErr("Ya existe una obra con ese código");return;}
+    if(obras.find(o=>o.codigo===codigo)){setObraErr("Ya existe ese código");return;}
     setSaving(true);
-    try{
-      const obra={id:uid(),nombre,codigo,direccion:obraF.direccion.trim(),activa:true,at:Date.now()};
-      await sb.post("obras",obra);setObras(prev=>[...prev,obra]);
-      setObraF(emptyObra);setObraErr("");setShowObraF(false);
-    }catch(e){setObraErr("Error al guardar.");}
+    try{const obra={id:uid(),nombre,codigo,direccion:obraF.direccion.trim(),activa:true,at:Date.now()};await sb.post("obras",obra);setObras(prev=>[...prev,obra]);setObraF(emptyObra);setObraErr("");setShowObraF(false);}
+    catch(e){setObraErr("Error al guardar.");}
     setSaving(false);
   }
 
-  // Pedidos
   async function savePedido(){
     setNewErr("");
     if(!newForm.tipo||!newForm.titulo.trim()||!newForm.obraId){setNewErr("Tipo, título y obra son obligatorios");return;}
@@ -318,344 +227,313 @@ export default function App(){
     if(["compra_grande","licitacion","acopio"].includes(newForm.tipo)&&!newForm.urgencia){setNewErr("El nivel de urgencia es obligatorio");return;}
     const obra=obras.find(o=>o.id===newForm.obraId);
     const historial=[{accion:"Pedido creado",usuario:user.name,rol:RL[user.role],ts:Date.now(),comentario:newForm.descripcion.trim()}];
-    const dbP={
-      id:uid().toUpperCase(), referencia:getRef(obra.codigo,newForm.tipo,pedidos,newForm.obraId),
-      tipo:newForm.tipo, titulo:newForm.titulo.trim(),
-      obra_id:newForm.obraId, obra_nombre:obra.nombre,
-      descripcion:newForm.descripcion.trim(), estado: newForm.tipo==="licitacion"&&newForm.docLista ? "doc_lista" : "nuevo",
-      fecha_entrega:newForm.tipo==="compra_chica"?newForm.fechaEntrega:null,
-      urgencia:newForm.urgencia||null,
-      creado_por:user.id, creado_nombre:user.name, creado_at:Date.now(),
-      historial, metadata: newForm.proveedores?.length ? {proveedores_cotizacion: newForm.proveedores.map(n=>({id:uid(),nombre:n,estado:"enviado_a_cotizar",ts:Date.now()}))} : {},
-    };
+    const initMeta=newForm.proveedores?.length?{proveedores_cotizacion:newForm.proveedores.map(n=>({id:uid(),nombre:n,estado:"enviado_a_cotizar",ts:Date.now()}))}:{};
+    const dbP={id:uid().toUpperCase(),referencia:getRef(obra.codigo,newForm.tipo,pedidos,newForm.obraId),tipo:newForm.tipo,titulo:newForm.titulo.trim(),obra_id:newForm.obraId,obra_nombre:obra.nombre,descripcion:newForm.descripcion.trim(),estado:newForm.tipo==="licitacion"&&newForm.docLista?"doc_lista":"nuevo",fecha_entrega:newForm.tipo==="compra_chica"?newForm.fechaEntrega:null,urgencia:newForm.urgencia||null,creado_por:user.id,creado_nombre:user.name,creado_at:Date.now(),historial,metadata:initMeta};
     setSaving(true);
-    try{
-      await sb.post("pedidos",dbP);
-      setPedidos(prev=>[mapP(dbP),...prev]);
-      setNewForm(emptyNew);nav("dashboard");
-    }catch(e){setNewErr("Error al guardar.");}
+    try{await sb.post("pedidos",dbP);setPedidos(prev=>[mapP(dbP),...prev]);setNewForm(emptyNew);nav("dashboard");}
+    catch(e){setNewErr("Error al guardar.");}
     setSaving(false);
   }
 
-  async function doSimpleAction(pedido, action, comment="", extraMeta={}){
+  async function doSimpleAction(pedido,action,comment="",extraMeta={}){
     const entry={accion:action.label,usuario:user.name,rol:RL[user.role],ts:Date.now(),comentario:comment};
-    const newH=[...pedido.historial,entry];
-    const newMeta={...pedido.metadata,...extraMeta};
-    try{
-      await sb.patch("pedidos",pedido.id,{estado:action.newEstado,historial:newH,metadata:newMeta});
-      const up={...pedido,estado:action.newEstado,historial:newH,metadata:newMeta};
-      setPedidos(prev=>prev.map(p=>p.id===pedido.id?up:p));
-      setSel(up);
-    }catch(e){alert("Error al guardar la acción.");}
+    const newH=[...pedido.historial,entry];const newMeta={...pedido.metadata,...extraMeta};
+    try{await sb.patch("pedidos",pedido.id,{estado:action.newEstado,historial:newH,metadata:newMeta});const up={...pedido,estado:action.newEstado,historial:newH,metadata:newMeta};setPedidos(prev=>prev.map(p=>p.id===pedido.id?up:p));setSel(up);}
+    catch(e){alert("Error al guardar la acción.");}
   }
-  async function doFormAction(pedido, action, form){
-    const {newEstado, newMeta}=resolveAction(action, pedido, form);
-    if(!newEstado){alert("Error: no se pudo determinar el estado siguiente.");return;}
+
+  async function doFormAction(pedido,action,form){
+    const{newEstado,newMeta}=resolveAction(action,pedido,form);
+    if(!newEstado){alert("Error: no se pudo determinar el estado.");return;}
     const entry={accion:action.label,usuario:user.name,rol:RL[user.role],ts:Date.now(),comentario:form.comment||""};
     const newH=[...pedido.historial,entry];
-    try{
-      await sb.patch("pedidos",pedido.id,{estado:newEstado,historial:newH,metadata:newMeta});
-      const up={...pedido,estado:newEstado,historial:newH,metadata:newMeta};
-      setPedidos(prev=>prev.map(p=>p.id===pedido.id?up:p));
-      setSel(up);setActionModal(null);
-    }catch(e){alert("Error al guardar: "+e.message);}
+    try{await sb.patch("pedidos",pedido.id,{estado:newEstado,historial:newH,metadata:newMeta});const up={...pedido,estado:newEstado,historial:newH,metadata:newMeta};setPedidos(prev=>prev.map(p=>p.id===pedido.id?up:p));setSel(up);setActionModal(null);}
+    catch(e){alert("Error al guardar.");}
   }
-  async function updateMeta(pedido, newMeta){
-    try{
-      await sb.patch("pedidos",pedido.id,{metadata:newMeta});
-      const up={...pedido,metadata:newMeta};
-      setPedidos(prev=>prev.map(p=>p.id===pedido.id?up:p));
-      setSel(up);
-    }catch(e){alert("Error al guardar.");}
+
+  async function updateMeta(pedido,newMeta){
+    try{await sb.patch("pedidos",pedido.id,{metadata:newMeta});const up={...pedido,metadata:newMeta};setPedidos(prev=>prev.map(p=>p.id===pedido.id?up:p));setSel(up);}
+    catch(e){alert("Error al guardar.");}
   }
 
   async function deletePedido(pedido){
-    try{
-      await sb.del("pedidos",pedido.id);
-      setPedidos(prev=>prev.filter(p=>p.id!==pedido.id));
-      setSel(null);nav("dashboard");setDelConfirm(null);
-    }catch(e){alert("Error al eliminar.");}
+    try{await sb.del("pedidos",pedido.id);setPedidos(prev=>prev.filter(p=>p.id!==pedido.id));setSel(null);nav("dashboard");setDelConfirm(null);}
+    catch(e){alert("Error al eliminar.");}
   }
 
-  if(!loaded) return(
-    <div className="flex flex-col items-center justify-center h-screen bg-slate-50 text-slate-400 gap-3">
-      <div className="text-4xl">⚙️</div><p>Conectando...</p>
-      {loadErr&&<p className="text-red-400 text-sm">{loadErr}</p>}
+  if(!loaded)return(
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",background:BG,color:TM,fontFamily:"inherit",gap:8}}>
+      <div style={{fontWeight:900,fontSize:20,letterSpacing:"-0.5px",color:TX}}>SUELO™</div>
+      <div style={{...css.lbl,color:TM,fontSize:9}}>Conectando...</div>
+      {loadErr&&<div style={{color:"#CC3333",fontSize:12,marginTop:8}}>{loadErr}</div>}
     </div>
   );
 
-  // LOGIN ──────────────────────────────────────────────────────
-  if(!user) return(
-    <div className="min-h-screen bg-gradient-to-br from-slate-800 via-slate-700 to-slate-900 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm">
-        <div className="text-center mb-7">
-          <div className="text-4xl mb-2">🏗️</div>
-          <h1 className="text-2xl font-bold text-slate-800">Gestión de Compras</h1>
-          <p className="text-slate-400 text-sm mt-1">Iniciá sesión para continuar</p>
+  // ── LOGIN ──────────────────────────────────────────────────
+  if(!user)return(
+    <div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",padding:24,fontFamily:"Inter, system-ui, sans-serif"}}>
+      <div style={{width:"100%",maxWidth:400}}>
+      <div style={{background:"#0F0D0B",padding:"44px 40px 36px",textAlign:"center"}}>
+  <SueloLogo size={58} color="#fff"/>
+  <div style={{fontSize:9,letterSpacing:"0.22em",color:"rgba(255,255,255,0.35)",textTransform:"uppercase",fontWeight:600,marginTop:14,fontFamily:"'Inter',system-ui,sans-serif"}}>Gestión de Compras</div>
+</div>
+        <div style={{background:CB,border:`1px solid ${BD}`,borderTop:"none",padding:"32px 28px"}}>
+          <Fld label="Usuario">
+            <input style={css.input} value={loginF.username} placeholder="nombre.apellido" onChange={e=>setLoginF(f=>({...f,username:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&login()}/>
+          </Fld>
+          <div style={{marginTop:16}}>
+            <Fld label="Contraseña">
+              <input type="password" style={css.input} value={loginF.password} onChange={e=>setLoginF(f=>({...f,password:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&login()}/>
+            </Fld>
+          </div>
+          {loginErr&&<div style={{color:"#CC3333",fontSize:12,marginTop:12,letterSpacing:"0.04em"}}>{loginErr}</div>}
+          <button onClick={login} style={{...btnS("primary"),width:"100%",marginTop:20,padding:"12px 20px"}}>Ingresar</button>
         </div>
-        <div className="space-y-4">
-          <Fld label="Usuario"><input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" value={loginF.username} placeholder="nombre.apellido" onChange={e=>setLoginF(f=>({...f,username:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&login()}/></Fld>
-          <Fld label="Contraseña"><input type="password" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" value={loginF.password} onChange={e=>setLoginF(f=>({...f,password:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&login()}/></Fld>
-          {loginErr&&<p className="text-red-500 text-sm">{loginErr}</p>}
-          <button onClick={login} className="w-full bg-slate-800 hover:bg-slate-700 text-white font-medium py-2.5 rounded-lg text-sm">Ingresar</button>
-        </div>
-        <div className="mt-5 border-t pt-4">
-          <button onClick={()=>setShowDemo(!showDemo)} className="text-xs text-slate-400 hover:text-slate-600">{showDemo?"▲":"▼"} Ver usuarios de demo</button>
-          {showDemo&&<div className="mt-2 text-xs text-slate-500 space-y-1 bg-slate-50 rounded-lg p-3">
-            <p>👔 <b>Director:</b> carlos.martinez / dir123</p>
-            <p>🪖 <b>Jefe Obra:</b> lucas.rodriguez / obra123</p>
-            <p>📐 <b>Arquitecto:</b> sofia.perez / arq123</p>
-            <p>🛒 <b>Compras:</b> javier.suarez / comp123</p>
-            <p>💳 <b>Admin:</b> maria.gonzalez / adm123</p>
-          </div>}
+        <div style={{marginTop:16,textAlign:"center"}}>
+          <button onClick={()=>setShowDemo(!showDemo)} style={{...btnS("ghost"),fontSize:10,letterSpacing:"0.1em"}}>{showDemo?"▲":"▼"} Usuarios de demo</button>
+          {showDemo&&(
+            <div style={{background:CB,border:`1px solid ${BD}`,padding:"12px 16px",textAlign:"left",marginTop:4}}>
+              {[["👔 Director","carlos.martinez","dir123"],["🪖 Jefe Obra","lucas.rodriguez","obra123"],["📐 Arquitecto","sofia.perez","arq123"],["🛒 Compras","javier.suarez","comp123"],["💳 Admin","maria.gonzalez","adm123"]].map(([r,u,p])=>(
+                <div key={u} style={{fontSize:11,color:TM,marginBottom:4,fontFamily:"monospace"}}><span style={{color:TX,fontFamily:"inherit"}}>{r}:</span> {u} / {p}</div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 
-  // MAIN APP ───────────────────────────────────────────────────
+  // ── MAIN APP ───────────────────────────────────────────────
   const canCreate=CREATE_PERMS[user.role]||[];
   const isDir=user.role==="director";
   const myPending=pedidos.filter(p=>isPending(p,user.role));
-  const dashPending=myPending.filter(p=>
-    (!dashF.tipo||p.tipo===dashF.tipo)&&
-    (!dashF.obraId||p.obraId===dashF.obraId)
-  );
+  const dashPending=myPending.filter(p=>(!dashF.tipo||p.tipo===dashF.tipo)&&(!dashF.obraId||p.obraId===dashF.obraId));
   const allFiltered=pedidos.filter(p=>{
     const activo=ACTIVE_ESTADOS.includes(p.estado);
-    const archivoMatch = allF.archivo==="todos" || (allF.archivo==="activos"&&activo) || (allF.archivo==="archivados"&&!activo);
-    return archivoMatch &&
-      (!allF.tipo||p.tipo===allF.tipo)&&
-      (!allF.estado||p.estado===allF.estado)&&
-      (!allF.obraId||p.obraId===allF.obraId);
+    const archMatch=allF.archivo==="todos"||(allF.archivo==="activos"&&activo)||(allF.archivo==="archivados"&&!activo);
+    return archMatch&&(!allF.tipo||p.tipo===allF.tipo)&&(!allF.estado||p.estado===allF.estado)&&(!allF.obraId||p.obraId===allF.obraId);
   });
   const tabs=["dashboard","todos",...(canCreate.length?["nuevo"]:[]),...(isDir?["obras","usuarios"]:[])];
+  const TAB_LABELS={dashboard:"Dashboard",todos:"Pedidos",nuevo:"+ Nuevo",obras:"Obras",usuarios:"Usuarios"};
 
   return(
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      {/* Header */}
-      <header className="bg-slate-800 text-white px-5 py-3 flex items-center justify-between shadow-lg">
-        <div className="flex items-center gap-3">
-          <span className="text-xl">🏗️</span>
-          <div><p className="font-bold text-sm leading-tight">Gestión de Compras</p><p className="text-xs text-slate-400">{user.name} · {RL[user.role]}</p></div>
+    <div style={{minHeight:"100vh",background:BG,fontFamily:"Inter, system-ui, sans-serif"}}>
+      {/* ── Header ── */}
+      <header style={{background:G,padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between",height:52}}>
+        <div style={{display:"flex",alignItems:"center",gap:14}}>
+          <span style={{fontFamily:"'Inter',system-ui,sans-serif",fontWeight:900,fontSize:19,letterSpacing:"0.05em",color:"#fff",lineHeight:1}}>SUELO<sup style={{fontSize:9,letterSpacing:0,verticalAlign:"super"}}>®</sup></span>
+          <div style={{width:1,height:16,background:"rgba(255,255,255,0.2)"}}/>
+          <div style={{...css.lbl,color:"rgba(255,255,255,0.55)",fontSize:9}}>Gestión de Compras</div>
         </div>
-        <button onClick={logout} className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg">Salir</button>
-      </header>
+        <div style={{display:"flex",alignItems:"center",gap:16}}>
+          <div style={{...css.lbl,color:"rgba(255,255,255,0.75)",fontSize:9}}>{user.name} · {RL[user.role].toUpperCase()}</div>
+          <button onClick={logout} style={{...btnS("outline"),padding:"6px 14px",fontSize:10,color:"#fff",borderColor:"rgba(255,255,255,0.35)"}}>Salir</button>
+        </div>
+    </header>
 
-      {/* Nav */}
-      <nav className="bg-white border-b border-slate-200 px-4 flex overflow-x-auto">
+      {/* ── Nav ── */}
+      <nav style={{background:CB,borderBottom:`1px solid ${BD}`,padding:"0 24px",display:"flex",gap:0,overflowX:"auto"}}>
         {tabs.map(v=>(
-          <button key={v} onClick={()=>nav(v)} className={`px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition ${view===v&&!sel?"border-slate-800 text-slate-800":"border-transparent text-slate-500 hover:text-slate-700"}`}>
-            {v==="dashboard"?<>Dashboard{myPending.length>0&&<span className="ml-1 bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">{myPending.length}</span>}</>
-              :v==="todos"?"Todos los pedidos":v==="nuevo"?"➕ Nuevo":v==="obras"?"🏢 Obras":"👥 Usuarios"}
+          <button key={v} onClick={()=>nav(v)} style={{background:"transparent",border:"none",borderBottom:view===v&&!sel?`2px solid ${TX}`:"2px solid transparent",padding:"14px 18px",fontSize:11,letterSpacing:"0.1em",textTransform:"uppercase",fontWeight:view===v&&!sel?700:500,color:view===v&&!sel?TX:TM,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",marginBottom:-1}}>
+            {v==="dashboard"?(
+              <span>{TAB_LABELS[v]}{myPending.length>0&&<span style={{marginLeft:6,background:"#CC3333",color:"#fff",fontSize:9,padding:"2px 6px",fontWeight:700,letterSpacing:"0.08em"}}>{myPending.length}</span>}</span>
+            ):TAB_LABELS[v]}
           </button>
         ))}
       </nav>
 
-      <main className="flex-1 p-4 max-w-4xl mx-auto w-full">
+      <main style={{padding:24,maxWidth:900,margin:"0 auto"}}>
 
-        {/* DASHBOARD */}
+        {/* ── DASHBOARD ── */}
         {view==="dashboard"&&!sel&&(
           <div>
-            <div className="grid grid-cols-3 gap-3 mb-5">
-              {[
-                {label:"Pendientes mías",value:myPending.length,color:"text-yellow-600",bg:"bg-yellow-50 border-yellow-200"},
-                {label:"Total activos",value:pedidos.filter(p=>ACTIVE_ESTADOS.includes(p.estado)).length,color:"text-slate-700",bg:"bg-white border-slate-200"},
-                {label:"Archivados",value:pedidos.filter(p=>["archivado","rechazado"].includes(p.estado)).length,color:"text-slate-500",bg:"bg-slate-50 border-slate-200"},
-              ].map(s=><div key={s.label} className={`rounded-xl border p-3 ${s.bg}`}><p className="text-xs text-slate-500">{s.label}</p><p className={`text-2xl font-bold ${s.color}`}>{s.value}</p></div>)}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:24}}>
+              {[{label:"Pendientes",value:myPending.length,color:"#CC3333"},{label:"Total activos",value:pedidos.filter(p=>ACTIVE_ESTADOS.includes(p.estado)).length,color:TX},{label:"Archivados",value:pedidos.filter(p=>["archivado","rechazado"].includes(p.estado)).length,color:TM}].map(s=>(
+                <div key={s.label} style={{...css.card,padding:"20px 24px"}}>
+                  <div style={{fontSize:36,fontWeight:900,color:s.color,letterSpacing:"-2px",lineHeight:1}}>{s.value}</div>
+                  <div style={{...css.lbl,color:TM,fontSize:9,marginTop:4}}>{s.label}</div>
+                </div>
+              ))}
             </div>
-            <FiltersBar f={dashF} setF={setDashF} obras={obras} showArchivo={false}/>
+            <FiltersBar f={dashF} setF={setDashF} obras={obras} showArchivo={false} showEstado={false}/>
             {dashPending.length===0
-              ?<Empty icon={myPending.length===0?"✅":"🔍"} title={myPending.length===0?"¡Estás al día!":"Sin resultados"} sub={myPending.length===0?"No tenés pedidos pendientes.":"Probá cambiando los filtros."}/>
-              :<><p className="font-semibold text-slate-700 mb-3 text-sm">Requieren tu acción ({dashPending.length})</p><div className="space-y-2">{dashPending.map(p=><PCard key={p.id} p={p} onClick={()=>{setSel(p);setView("detalle");}}/>)}</div></>
+              ?<Empty icon={myPending.length===0?"✓":"○"} title={myPending.length===0?"Al día":"Sin resultados"} sub={myPending.length===0?"No tenés pedidos pendientes.":"Probá cambiando los filtros."}/>
+              :<><SectionLabel text={`Requieren tu acción (${dashPending.length})`}/><div style={{display:"flex",flexDirection:"column",gap:2}}>{dashPending.map(p=><PCard key={p.id} p={p} onClick={()=>{setSel(p);setView("detalle");}}/>)}</div></>
             }
           </div>
         )}
 
-        {/* TODOS */}
+        {/* ── TODOS ── */}
         {view==="todos"&&!sel&&(
           <div>
-            <div className="flex flex-wrap gap-2 mb-4 items-center">
-              <FiltersBar f={allF} setF={setAllF} obras={obras} showArchivo={true}/>
-              <span className="text-xs text-slate-400 ml-auto">{allFiltered.length} resultado{allFiltered.length!==1?"s":""}</span>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,flexWrap:"wrap",gap:8}}>
+              <FiltersBar f={allF} setF={setAllF} obras={obras} showArchivo={true} showEstado={true}/>
+              <div style={{...css.lbl,color:TM,fontSize:9}}>{allFiltered.length} resultado{allFiltered.length!==1?"s":""}</div>
             </div>
-            {allFiltered.length===0?<Empty icon="📋" title="Sin resultados" sub="No hay pedidos con esos filtros."/>
-              :<div className="space-y-2">{allFiltered.map(p=><PCard key={p.id} p={p} onClick={()=>{setSel(p);setView("detalle");}}/>)}</div>}
+            {allFiltered.length===0?<Empty icon="○" title="Sin resultados" sub="No hay pedidos con esos filtros."/>
+              :<div style={{display:"flex",flexDirection:"column",gap:2}}>{allFiltered.map(p=><PCard key={p.id} p={p} onClick={()=>{setSel(p);setView("detalle");}}/>)}</div>}
           </div>
         )}
 
-        {/* NUEVO */}
+        {/* ── NUEVO ── */}
         {view==="nuevo"&&!sel&&(
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 max-w-lg">
-            <h2 className="text-lg font-bold text-slate-800 mb-5">Crear nuevo pedido</h2>
-            {obras.length===0&&<div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-700 mb-4">⚠️ No hay obras cargadas. Un Director debe crearlas primero.</div>}
-            <div className="space-y-4">
-              <Fld label="Obra *">
-                <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" value={newForm.obraId} onChange={e=>setNewForm(f=>({...f,obraId:e.target.value}))}>
-                  <option value="">Seleccioná una obra...</option>
-                  {obras.filter(o=>o.activa).map(o=><option key={o.id} value={o.id}>{o.nombre} ({o.codigo})</option>)}
-                </select>
-              </Fld>
-              <Fld label="Tipo de pedido *">
-                <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" value={newForm.tipo} onChange={e=>setNewForm(f=>({...f,tipo:e.target.value,urgencia:"",fechaEntrega:""}))}>
-                  <option value="">Seleccioná...</option>
-                  {canCreate.map(t=><option key={t} value={t}>{TL[t]}</option>)}
-                </select>
-              </Fld>
-              <Fld label="Título / Referencia *">
-                <input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="Ej: Hierro para columnas torre A" value={newForm.titulo} onChange={e=>setNewForm(f=>({...f,titulo:e.target.value}))}/>
-              </Fld>
-              {newForm.tipo==="compra_chica"&&(
-                <Fld label={<>Fecha de entrega * <span className="text-slate-400 font-normal text-xs">(mín. 48 hs hábiles)</span></>}>
-                  <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" min={minDel()} value={newForm.fechaEntrega} onChange={e=>setNewForm(f=>({...f,fechaEntrega:e.target.value}))}/>
+          <div style={{maxWidth:560}}>
+            <SectionLabel text="Nuevo pedido"/>
+            {obras.length===0&&<div style={{border:`1px solid #C47820`,padding:"12px 16px",marginBottom:16,color:"#C47820",fontSize:12,letterSpacing:"0.04em"}}>⚠ No hay obras cargadas. Un Director debe crearlas primero.</div>}
+            <div style={{...css.card,padding:"28px 24px"}}>
+              <div style={{display:"flex",flexDirection:"column",gap:16}}>
+                <Fld label="Obra *">
+                  <select style={css.input} value={newForm.obraId} onChange={e=>setNewForm(f=>({...f,obraId:e.target.value}))}>
+                    <option value="">Seleccioná una obra...</option>
+                    {obras.filter(o=>o.activa).map(o=><option key={o.id} value={o.id}>{o.nombre} ({o.codigo})</option>)}
+                  </select>
                 </Fld>
-              )}
-              {["compra_grande","acopio"].includes(newForm.tipo)&&(
-  <Fld label="Nivel de urgencia *">
-    <div className="flex gap-2">
-      {["bajo","medio","alto"].map(u=>(
-        <button key={u} type="button" onClick={()=>setNewForm(f=>({...f,urgencia:u}))}
-          className={`flex-1 py-2 rounded-lg text-sm font-medium border-2 transition capitalize ${newForm.urgencia===u?(u==="bajo"?"border-green-500 bg-green-50 text-green-700":u==="medio"?"border-yellow-500 bg-yellow-50 text-yellow-700":"border-red-500 bg-red-50 text-red-700"):"border-slate-200 text-slate-400"}`}>
-          {u==="bajo"?"🟢 Bajo":u==="medio"?"🟡 Medio":"🔴 Alto"}
-        </button>
-      ))}
-    </div>
-  </Fld>
-)}
-{newForm.tipo==="licitacion"&&(
-  <>
-    <Fld label="Nivel de urgencia *">
-      <div className="flex gap-2">
-        {["bajo","medio","alto"].map(u=>(
-          <button key={u} type="button" onClick={()=>setNewForm(f=>({...f,urgencia:u}))}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium border-2 transition capitalize ${newForm.urgencia===u?(u==="bajo"?"border-green-500 bg-green-50 text-green-700":u==="medio"?"border-yellow-500 bg-yellow-50 text-yellow-700":"border-red-500 bg-red-50 text-red-700"):"border-slate-200 text-slate-400"}`}>
-            {u==="bajo"?"🟢 Bajo":u==="medio"?"🟡 Medio":"🔴 Alto"}
-          </button>
-        ))}
-      </div>
-    </Fld>
-    {user.role==="arquitecto"&&(
-      <div className="flex items-center gap-3 bg-indigo-50 border border-indigo-200 rounded-lg p-3">
-        <button type="button" onClick={()=>setNewForm(f=>({...f,docLista:!f.docLista}))}
-          className={`relative w-11 h-6 rounded-full transition flex-shrink-0 ${newForm.docLista?"bg-indigo-600":"bg-slate-300"}`}>
-          <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${newForm.docLista?"left-5":"left-0.5"}`}/>
-        </button>
-        <div>
-          <p className="text-sm font-medium text-indigo-800">Documentación lista</p>
-          <p className="text-xs text-indigo-500">{newForm.docLista?"Pasa directo a Compras":"Queda en espera hasta que la marqués lista"}</p>
-        </div>
-      </div>
-    )}
-  {user.role==="arquitecto"&&(
-  <div className="border border-slate-200 rounded-lg overflow-hidden">
-    <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
-      <p className="text-xs font-semibold text-slate-600">📨 Proveedores a cotizar</p>
-    </div>
-    <div className="p-3 space-y-2">
-      {(newForm.proveedores||[]).map((p,i)=>(
-        <div key={i} className="flex items-center gap-2">
-          <span className="text-sm text-slate-700 flex-1">{p}</span>
-          <button type="button" onClick={()=>setNewForm(f=>({...f,proveedores:f.proveedores.filter((_,j)=>j!==i)}))} className="text-slate-300 hover:text-red-400 text-xs">✕</button>
-        </div>
-      ))}
-      <div className="flex gap-2">
-        <input className="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-sm"
-          placeholder="Nombre del proveedor..."
-          value={newForm.provNuevo||""}
-          onChange={e=>setNewForm(f=>({...f,provNuevo:e.target.value}))}
-          onKeyDown={e=>{if(e.key==="Enter"&&newForm.provNuevo?.trim()){setNewForm(f=>({...f,proveedores:[...(f.proveedores||[]),f.provNuevo.trim()],provNuevo:""}));}}}/>
-        <button type="button"
-          onClick={()=>{if(newForm.provNuevo?.trim())setNewForm(f=>({...f,proveedores:[...(f.proveedores||[]),f.provNuevo.trim()],provNuevo:""}));}}
-          className="bg-slate-800 hover:bg-slate-700 text-white text-xs px-3 py-1.5 rounded-lg">+ Agregar</button>
-      </div>
-    </div>
-  </div>
-)}</>
-)}
-              <Fld label="Observaciones">
-                <textarea className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" rows={3} placeholder="Detalles, referencia al servidor interno..." value={newForm.descripcion} onChange={e=>setNewForm(f=>({...f,descripcion:e.target.value}))}/>
-              </Fld>
-              {newForm.obraId&&newForm.tipo&&(
-                <div className="bg-slate-50 rounded-lg p-3 border border-slate-100">
-                  <p className="text-xs text-slate-500">Referencia del pedido:</p>
-                  <p className="font-mono font-bold text-slate-700 mt-0.5">{getRef(obras.find(o=>o.id===newForm.obraId)?.codigo||"???",newForm.tipo,pedidos,newForm.obraId)}</p>
+                <Fld label="Tipo de pedido *">
+                  <select style={css.input} value={newForm.tipo} onChange={e=>setNewForm(f=>({...f,tipo:e.target.value,urgencia:"",fechaEntrega:"",docLista:false}))}>
+                    <option value="">Seleccioná...</option>
+                    {canCreate.map(t=><option key={t} value={t}>{TL[t]}</option>)}
+                  </select>
+                </Fld>
+                <Fld label="Título / Referencia *">
+                  <input style={css.input} placeholder="Ej: Hierro corrugado Ø12 para columnas" value={newForm.titulo} onChange={e=>setNewForm(f=>({...f,titulo:e.target.value}))}/>
+                </Fld>
+                {newForm.tipo==="compra_chica"&&(
+                  <Fld label={<>Fecha de entrega * <span style={{color:TM,fontWeight:400,textTransform:"none",letterSpacing:0,fontSize:11}}>(mín. 48 hs hábiles)</span></>}>
+                    <input type="date" style={css.input} min={minDel()} value={newForm.fechaEntrega} onChange={e=>setNewForm(f=>({...f,fechaEntrega:e.target.value}))}/>
+                  </Fld>
+                )}
+                {["compra_grande","licitacion","acopio"].includes(newForm.tipo)&&(
+                  <Fld label="Urgencia *">
+                    <div style={{display:"flex",gap:0}}>
+                      {["bajo","medio","alto"].map((u,i)=>(
+                        <button key={u} type="button" onClick={()=>setNewForm(f=>({...f,urgencia:u}))}
+                          style={{flex:1,padding:"10px 8px",fontSize:11,letterSpacing:"0.1em",textTransform:"uppercase",fontWeight:700,cursor:"pointer",fontFamily:"inherit",border:`1px solid ${BD}`,borderLeft:i>0?"none":undefined,background:newForm.urgencia===u?URG[u].color:"transparent",color:newForm.urgencia===u?"#fff":TM,transition:"all 0.1s"}}>
+                          {u==="bajo"?"↓ Bajo":u==="medio"?"→ Medio":"↑ Alto"}
+                        </button>
+                      ))}
+                    </div>
+                  </Fld>
+                )}
+                {newForm.tipo==="licitacion"&&user.role==="arquitecto"&&(
+                  <div style={{border:`1px solid ${G}`,padding:"14px 16px",display:"flex",alignItems:"center",gap:12}}>
+                    <button type="button" onClick={()=>setNewForm(f=>({...f,docLista:!f.docLista}))}
+                      style={{position:"relative",width:40,height:22,borderRadius:11,border:"none",background:newForm.docLista?G:BD,cursor:"pointer",flexShrink:0,transition:"background 0.2s"}}>
+                      <span style={{position:"absolute",top:2,width:18,height:18,borderRadius:9,background:"#fff",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",transition:"left 0.2s",left:newForm.docLista?20:2}}/>
+                    </button>
+                    <div>
+                      <div style={{...css.lbl,color:G,fontSize:10}}>Documentación lista</div>
+                      <div style={{fontSize:11,color:TM,marginTop:1}}>{newForm.docLista?"Pasa directo a Compras":"Queda en espera en Proyecto"}</div>
+                    </div>
+                  </div>
+                )}
+                {newForm.tipo==="licitacion"&&user.role==="arquitecto"&&(
+                  <Fld label="Proveedores a cotizar">
+                    <div style={{border:`1px solid ${BD}`,background:"#fff"}}>
+                      {(newForm.proveedores||[]).map((p,i)=>(
+                        <div key={i} style={{display:"flex",alignItems:"center",padding:"8px 12px",borderBottom:`1px solid ${BD}`}}>
+                          <span style={{flex:1,fontSize:13,color:TX}}>{p}</span>
+                          <button type="button" onClick={()=>setNewForm(f=>({...f,proveedores:f.proveedores.filter((_,j)=>j!==i)}))} style={{...btnS("ghost"),padding:"0 4px",fontSize:12,color:TM}}>✕</button>
+                        </div>
+                      ))}
+                      <div style={{display:"flex"}}>
+                        <input style={{...css.input,border:"none",borderTop:(newForm.proveedores||[]).length>0?`1px solid ${BD}`:"none"}} placeholder="Nombre del proveedor..."
+                          value={newForm.provNuevo||""} onChange={e=>setNewForm(f=>({...f,provNuevo:e.target.value}))}
+                          onKeyDown={e=>{if(e.key==="Enter"&&newForm.provNuevo?.trim())setNewForm(f=>({...f,proveedores:[...(f.proveedores||[]),f.provNuevo.trim()],provNuevo:""}));}}/>
+                        <button type="button" onClick={()=>{if(newForm.provNuevo?.trim())setNewForm(f=>({...f,proveedores:[...(f.proveedores||[]),f.provNuevo.trim()],provNuevo:""}));}}
+                          style={{...btnS("outline"),whiteSpace:"nowrap",borderLeft:"none",padding:"10px 14px"}}>+ Agregar</button>
+                      </div>
+                    </div>
+                  </Fld>
+                )}
+                <Fld label="Observaciones">
+                  <textarea style={{...css.ta,height:72}} placeholder="Detalles, referencia al servidor interno..." value={newForm.descripcion} onChange={e=>setNewForm(f=>({...f,descripcion:e.target.value}))}/>
+                </Fld>
+                {newForm.obraId&&newForm.tipo&&(
+                  <div style={{borderLeft:`3px solid ${G}`,paddingLeft:12}}>
+                    <div style={{...css.lbl,color:TM,fontSize:9}}>Referencia del pedido</div>
+                    <div style={{fontFamily:"monospace",fontWeight:700,color:TX,fontSize:13,marginTop:2}}>{getRef(obras.find(o=>o.id===newForm.obraId)?.codigo||"???",newForm.tipo,pedidos,newForm.obraId)}</div>
+                  </div>
+                )}
+                {newErr&&<div style={{color:"#CC3333",fontSize:12,letterSpacing:"0.04em"}}>{newErr}</div>}
+                <div style={{display:"flex",gap:8,paddingTop:4}}>
+                  <button onClick={savePedido} disabled={obras.length===0||saving} style={{...btnS("primary"),opacity:obras.length===0||saving?0.4:1}}>{saving?"Guardando...":"Crear pedido"}</button>
+                  <button onClick={()=>nav("dashboard")} style={btnS("ghost")}>Cancelar</button>
                 </div>
-              )}
-              {newErr&&<p className="text-red-500 text-sm">{newErr}</p>}
-              <div className="flex gap-3 pt-1">
-                <button onClick={savePedido} disabled={obras.length===0||saving} className="bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-white font-medium px-5 py-2 rounded-lg text-sm">{saving?"Guardando...":"Crear pedido"}</button>
-                <button onClick={()=>nav("dashboard")} className="text-slate-500 hover:text-slate-700 text-sm px-3">Cancelar</button>
               </div>
             </div>
           </div>
         )}
 
-        {/* OBRAS */}
+        {/* ── OBRAS ── */}
         {view==="obras"&&!sel&&isDir&&(
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-slate-800">Obras</h2>
-              <button onClick={()=>setShowObraF(!showObraF)} className="bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium px-4 py-2 rounded-lg">{showObraF?"Cancelar":"+ Nueva obra"}</button>
+          <div style={{maxWidth:560}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+              <SectionLabel text="Obras"/>
+              <button onClick={()=>setShowObraF(!showObraF)} style={btnS(showObraF?"outline":"primary",{padding:"8px 16px"})}>{showObraF?"Cancelar":"+ Nueva obra"}</button>
             </div>
             {showObraF&&(
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 mb-4 max-w-md">
-                <div className="space-y-3">
-                  <Fld label="Nombre *"><input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="Ej: Edificio Palermo" value={obraF.nombre} onChange={e=>setObraF(f=>({...f,nombre:e.target.value}))}/></Fld>
-                  <Fld label="Código * (2-5 letras)"><input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono uppercase" placeholder="PAL" maxLength={5} value={obraF.codigo} onChange={e=>setObraF(f=>({...f,codigo:e.target.value.toUpperCase()}))}/></Fld>
-                  <Fld label="Dirección"><input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="Av. Santa Fe 1234" value={obraF.direccion} onChange={e=>setObraF(f=>({...f,direccion:e.target.value}))}/></Fld>
-                  {obraErr&&<p className="text-red-500 text-sm">{obraErr}</p>}
-                  <button onClick={saveObra} disabled={saving} className="bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-white text-sm font-medium px-4 py-2 rounded-lg">{saving?"Guardando...":"Guardar obra"}</button>
+              <div style={{...css.card,padding:"24px",marginBottom:16}}>
+                <div style={{display:"flex",flexDirection:"column",gap:14}}>
+                  <Fld label="Nombre *"><input style={css.input} placeholder="Ej: Edificio Palermo" value={obraF.nombre} onChange={e=>setObraF(f=>({...f,nombre:e.target.value}))}/></Fld>
+                  <Fld label="Código * (2-5 letras)"><input style={{...css.input,fontFamily:"monospace",textTransform:"uppercase"}} placeholder="PAL" maxLength={5} value={obraF.codigo} onChange={e=>setObraF(f=>({...f,codigo:e.target.value.toUpperCase()}))}/></Fld>
+                  <Fld label="Dirección"><input style={css.input} placeholder="Av. Santa Fe 1234" value={obraF.direccion} onChange={e=>setObraF(f=>({...f,direccion:e.target.value}))}/></Fld>
+                  {obraErr&&<div style={{color:"#CC3333",fontSize:12}}>{obraErr}</div>}
+                  <button onClick={saveObra} disabled={saving} style={{...btnS("primary"),alignSelf:"flex-start",opacity:saving?0.4:1}}>{saving?"Guardando...":"Guardar obra"}</button>
                 </div>
               </div>
             )}
-            {obras.length===0?<Empty icon="🏢" title="No hay obras cargadas" sub="Creá la primera."/>
-              :<div className="space-y-2">{obras.map(o=>(
-                <div key={o.id} className="bg-white rounded-xl border border-slate-200 p-4">
-                  <div className="flex items-center gap-2"><span className="font-bold text-slate-800">{o.nombre}</span><span className="font-mono text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">{o.codigo}</span></div>
-                  {o.direccion&&<p className="text-xs text-slate-500 mt-0.5">📍 {o.direccion}</p>}
-                  <p className="text-xs text-slate-400 mt-1">{pedidos.filter(p=>p.obraId===o.id).length} pedido(s)</p>
+            {obras.length===0?<Empty icon="○" title="No hay obras cargadas" sub="Creá la primera obra para comenzar."/>
+              :<div style={{display:"flex",flexDirection:"column",gap:2}}>{obras.map(o=>(
+                <div key={o.id} style={{...css.card,padding:"16px 20px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <span style={{fontWeight:700,color:TX}}>{o.nombre}</span>
+                    <span style={{...css.lbl,color:G,fontSize:9,border:`1px solid ${G}`,padding:"2px 6px"}}>{o.codigo}</span>
+                  </div>
+                  {o.direccion&&<div style={{fontSize:12,color:TM,marginTop:4}}>📍 {o.direccion}</div>}
+                  <div style={{...css.lbl,color:TM,fontSize:9,marginTop:6}}>{pedidos.filter(p=>p.obraId===o.id).length} pedido(s)</div>
                 </div>
               ))}</div>}
           </div>
         )}
 
-        {/* USUARIOS */}
+        {/* ── USUARIOS ── */}
         {view==="usuarios"&&!sel&&isDir&&(
-          <div>
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-bold text-slate-800">Usuarios del sistema</h2>
-              <button onClick={openNewUser} className="bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium px-4 py-2 rounded-lg">+ Nuevo usuario</button>
+          <div style={{maxWidth:700}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+              <SectionLabel text="Usuarios del sistema"/>
+              <button onClick={openNewUser} style={btnS("primary",{padding:"8px 16px"})}>+ Nuevo usuario</button>
             </div>
             {editUser!==null&&(
-              <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
-                  <h3 className="font-bold text-slate-800 text-lg mb-5">{editUser.id?"Editar usuario":"Nuevo usuario"}</h3>
-                  <div className="space-y-4">
-                    <Fld label="Nombre *"><input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" value={userForm.name} onChange={e=>setUserForm(f=>({...f,name:e.target.value}))}/></Fld>
-                    <Fld label="Usuario *"><input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono" value={userForm.username} onChange={e=>setUserForm(f=>({...f,username:e.target.value.toLowerCase()}))}/></Fld>
+              <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:24}}>
+                <div style={{background:CB,border:`1px solid ${BD}`,padding:28,width:"100%",maxWidth:440}}>
+                  <div style={{...css.lbl,color:TX,fontSize:11,marginBottom:20}}>{editUser.id?"Editar usuario":"Nuevo usuario"}</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:14}}>
+                    <Fld label="Nombre *"><input style={css.input} value={userForm.name} onChange={e=>setUserForm(f=>({...f,name:e.target.value}))}/></Fld>
+                    <Fld label="Usuario *"><input style={{...css.input,fontFamily:"monospace"}} value={userForm.username} onChange={e=>setUserForm(f=>({...f,username:e.target.value.toLowerCase()}))}/></Fld>
                     <Fld label={editUser.id?"Nueva contraseña (vacío = no cambiar)":"Contraseña *"}>
-                      <div className="relative">
-                        <input type={showPass?"text":"password"} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm pr-16" value={userForm.password} onChange={e=>setUserForm(f=>({...f,password:e.target.value}))}/>
-                        <button type="button" onClick={()=>setShowPass(!showPass)} className="absolute right-3 top-2 text-xs text-slate-400">{showPass?"Ocultar":"Mostrar"}</button>
+                      <div style={{position:"relative"}}>
+                        <input type={showPass?"text":"password"} style={{...css.input,paddingRight:70}} value={userForm.password} onChange={e=>setUserForm(f=>({...f,password:e.target.value}))}/>
+                        <button type="button" onClick={()=>setShowPass(!showPass)} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:11,color:TM,fontFamily:"inherit"}}>{showPass?"Ocultar":"Mostrar"}</button>
                       </div>
                     </Fld>
                     <Fld label="Rol *">
-                      <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" value={userForm.role} onChange={e=>setUserForm(f=>({...f,role:e.target.value}))}>
+                      <select style={css.input} value={userForm.role} onChange={e=>setUserForm(f=>({...f,role:e.target.value}))}>
                         {RO.map(r=><option key={r} value={r}>{RL[r]}</option>)}
                       </select>
                     </Fld>
                     {editUser.id&&editUser.id!==user.id&&(
-                      <div className="flex items-center gap-3">
-                        <button type="button" onClick={()=>setUserForm(f=>({...f,activo:!f.activo}))} className={`relative w-11 h-6 rounded-full transition ${userForm.activo?"bg-green-500":"bg-slate-300"}`}>
-                          <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${userForm.activo?"left-5":"left-0.5"}`}/>
+                      <div style={{display:"flex",alignItems:"center",gap:12}}>
+                        <button type="button" onClick={()=>setUserForm(f=>({...f,activo:!f.activo}))}
+                          style={{position:"relative",width:40,height:22,borderRadius:11,border:"none",background:userForm.activo?G:BD,cursor:"pointer",flexShrink:0}}>
+                          <span style={{position:"absolute",top:2,width:18,height:18,borderRadius:9,background:"#fff",boxShadow:"0 1px 2px rgba(0,0,0,0.2)",left:userForm.activo?20:2,transition:"left 0.15s"}}/>
                         </button>
-                        <span className="text-sm text-slate-600">{userForm.activo?"Activo":"Inactivo"}</span>
+                        <span style={{fontSize:12,color:TX}}>{userForm.activo?"Usuario activo":"Usuario inactivo"}</span>
                       </div>
                     )}
-                    {userErr&&<p className="text-red-500 text-sm">{userErr}</p>}
-                    <div className="flex gap-3 pt-2">
-                      <button onClick={saveUser} disabled={saving} className="bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-white font-medium px-5 py-2 rounded-lg text-sm">{saving?"Guardando...":editUser.id?"Guardar cambios":"Crear usuario"}</button>
-                      <button onClick={()=>setEditUser(null)} className="text-slate-500 text-sm px-3">Cancelar</button>
+                    {userErr&&<div style={{color:"#CC3333",fontSize:12}}>{userErr}</div>}
+                    <div style={{display:"flex",gap:8,paddingTop:4}}>
+                      <button onClick={saveUser} disabled={saving} style={{...btnS("primary"),opacity:saving?0.4:1}}>{saving?"Guardando...":editUser.id?"Guardar cambios":"Crear usuario"}</button>
+                      <button onClick={()=>setEditUser(null)} style={btnS("ghost")}>Cancelar</button>
                     </div>
                   </div>
                 </div>
@@ -663,22 +541,23 @@ export default function App(){
             )}
             {RO.map(role=>{
               const g=users.filter(u=>u.role===role);
-              if(!g.length) return null;
+              if(!g.length)return null;
+              const roleColors={director:TX,jefe_obra:"#8B4513",arquitecto:G,compras:"#2D7A3A",admin:"#6B4B8F"};
               return(
-                <div key={role} className="mb-6">
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">{RL[role]} ({g.length})</p>
-                  <div className="space-y-2">
+                <div key={role} style={{marginBottom:20}}>
+                  <div style={{...css.lbl,color:roleColors[role],fontSize:9,marginBottom:8,paddingBottom:6,borderBottom:`1px solid ${BD}`}}>{RL[role]} ({g.length})</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:2}}>
                     {g.map(u=>(
-                      <div key={u.id} className={`bg-white rounded-xl border p-4 flex items-center gap-3 ${u.activo===false?"opacity-50 border-slate-100":"border-slate-200"}`}>
-                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0 ${u.activo===false?"bg-slate-300":role==="director"?"bg-slate-700":role==="jefe_obra"?"bg-orange-400":role==="arquitecto"?"bg-blue-400":role==="compras"?"bg-green-500":"bg-purple-400"}`}>{u.name.charAt(0)}</div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-slate-800 text-sm">{u.name}{u.id===user.id&&<span className="text-xs text-slate-400 ml-1">(vos)</span>}</p>
-                          <p className="text-xs text-slate-400 font-mono">{u.username}</p>
+                      <div key={u.id} style={{...css.card,padding:"12px 16px",display:"flex",alignItems:"center",gap:12,opacity:u.activo===false?0.5:1}}>
+                        <div style={{width:32,height:32,background:u.activo===false?BD:roleColors[role],display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:800,fontSize:13,flexShrink:0}}>{u.name.charAt(0)}</div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontWeight:700,fontSize:13,color:TX}}>{u.name}{u.id===user.id&&<span style={{...css.lbl,color:TM,fontSize:9,marginLeft:8}}>( VOS )</span>}</div>
+                          <div style={{fontFamily:"monospace",fontSize:11,color:TM}}>{u.username}</div>
                         </div>
-                        {u.activo===false&&<span className="text-xs bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full">Inactivo</span>}
-                        <div className="flex gap-2 flex-shrink-0">
-                          <button onClick={()=>openEditUser(u)} className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg">Editar</button>
-                          {u.id!==user.id&&<button onClick={()=>toggleActive(u)} className={`text-xs px-3 py-1.5 rounded-lg ${u.activo===false?"bg-green-100 text-green-700":"bg-red-100 text-red-600"}`}>{u.activo===false?"Activar":"Desactivar"}</button>}
+                        {u.activo===false&&<span style={{...css.lbl,color:TM,fontSize:9,border:`1px solid ${BD}`,padding:"2px 6px"}}>INACTIVO</span>}
+                        <div style={{display:"flex",gap:6,flexShrink:0}}>
+                          <button onClick={()=>openEditUser(u)} style={{...btnS("outline"),padding:"6px 12px"}}>Editar</button>
+                          {u.id!==user.id&&<button onClick={()=>toggleActive(u)} style={{...btnS(u.activo===false?"outline-green":"danger"),padding:"6px 12px"}}>{u.activo===false?"Activar":"Desactivar"}</button>}
                         </div>
                       </div>
                     ))}
@@ -689,39 +568,29 @@ export default function App(){
           </div>
         )}
 
-        {/* DETALLE */}
+        {/* ── DETALLE ── */}
         {view==="detalle"&&sel&&(
-          <DetailView
-          pedido={sel} user={user}
-          onSimpleAction={doSimpleAction}
-          onFormAction={(action)=>setActionModal({action,pedido:sel})}
-          onDelete={isDir?()=>setDelConfirm(sel):null}
-          onBack={()=>{setSel(null);setView("dashboard");}}
-          onUpdateMeta={(newMeta)=>updateMeta(sel,newMeta)}
-        />
+          <DetailView pedido={sel} user={user} onSimpleAction={doSimpleAction}
+            onFormAction={action=>setActionModal({action,pedido:sel})}
+            onDelete={isDir?()=>setDelConfirm(sel):null}
+            onBack={()=>{setSel(null);setView("dashboard");}}
+            onUpdateMeta={newMeta=>updateMeta(sel,newMeta)}/>
         )}
-
       </main>
 
-      {/* ACTION MODAL */}
-      {actionModal&&(
-        <ActionModal
-          modal={actionModal}
-          onSubmit={(form)=>doFormAction(actionModal.pedido, actionModal.action, form)}
-          onClose={()=>setActionModal(null)}
-        />
-      )}
+      {/* ── ACTION MODAL ── */}
+      {actionModal&&<ActionModal modal={actionModal} onSubmit={form=>doFormAction(actionModal.pedido,actionModal.action,form)} onClose={()=>setActionModal(null)}/>}
 
-      {/* DELETE CONFIRM */}
+      {/* ── DELETE CONFIRM ── */}
       {delConfirm&&(
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm text-center">
-            <div className="text-4xl mb-3">🗑️</div>
-            <h3 className="font-bold text-slate-800 text-lg mb-2">Eliminar pedido</h3>
-            <p className="text-slate-500 text-sm mb-5">¿Seguro que querés eliminar <b>{delConfirm.referencia}</b>? Esta acción no se puede deshacer.</p>
-            <div className="flex gap-3 justify-center">
-              <button onClick={()=>deletePedido(delConfirm)} className="bg-red-500 hover:bg-red-600 text-white font-medium px-5 py-2 rounded-lg text-sm">Eliminar</button>
-              <button onClick={()=>setDelConfirm(null)} className="text-slate-500 hover:text-slate-700 text-sm px-4">Cancelar</button>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:24}}>
+          <div style={{background:CB,border:`1px solid ${BD}`,padding:28,width:"100%",maxWidth:380,textAlign:"center"}}>
+            <div style={{...css.lbl,color:"#CC3333",fontSize:10,marginBottom:12}}>Eliminar pedido</div>
+            <div style={{fontSize:13,color:TX,marginBottom:6,fontWeight:700,fontFamily:"monospace"}}>{delConfirm.referencia}</div>
+            <div style={{fontSize:12,color:TM,marginBottom:20}}>Esta acción no se puede deshacer.</div>
+            <div style={{display:"flex",gap:8,justifyContent:"center"}}>
+              <button onClick={()=>deletePedido(delConfirm)} style={btnS("danger")}>Eliminar</button>
+              <button onClick={()=>setDelConfirm(null)} style={btnS("ghost")}>Cancelar</button>
             </div>
           </div>
         </div>
@@ -730,257 +599,188 @@ export default function App(){
   );
 }
 
-// ── Detail View ─────────────────────────────────────────────────
-function DetailView({pedido, user, onSimpleAction, onFormAction, onDelete, onBack, onUpdateMeta}){
-  const [comment,        setComment]       = useState("");
-  const [fechaRecepcion, setFechaRecepcion]= useState("");
-  const [nroRemito,      setNroRemito]     = useState("");
-  const [recepTipo,      setRecepTipo]     = useState("total"); // "total" | "parcial"
-  const [recibidoDesc,   setRecibidoDesc]  = useState("");
-  const [pendienteDesc,  setPendienteDesc] = useState("");
-  const [provNombre,     setProvNombre]    = useState("");
+// ── Detail View ────────────────────────────────────────────────
+function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onUpdateMeta}){
+  const[comment,setComment]=useState("");
+  const[fechaRecepcion,setFechaRecepcion]=useState("");
+  const[nroRemito,setNroRemito]=useState("");
+  const[recepTipo,setRecepTipo]=useState("total");
+  const[recibidoDesc,setRecibidoDesc]=useState("");
+  const[pendienteDesc,setPendienteDesc]=useState("");
+  const[provNombre,setProvNombre]=useState("");
+  const actions=getActions(pedido,user.role);
+  const meta=pedido.metadata||{};
+  const proveedores=meta.proveedores_cotizacion||[];
+  const recepParciales=meta.recepciones_parciales||[];
+  const isDelivery=a=>["Marcar Entregado","Marcar Recibido"].includes(a.label);
+  const hasDelivery=actions.some(isDelivery);
+  const canManageProvs=user.role==="compras"||user.role==="director"||(user.role==="arquitecto"&&pedido.tipo==="licitacion");
+  const isActive=ACTIVE_ESTADOS.includes(pedido.estado);
+  const PROV_EST={enviado_a_cotizar:{label:"Enviado",color:"#2D7A3A"},presup_recibido:{label:"Recibido",color:G},recibido_con_error:{label:"Con error",color:"#CC3333"}};
 
-  const actions   = getActions(pedido, user.role);
-  const meta      = pedido.metadata||{};
-  const proveedores         = meta.proveedores_cotizacion||[];
-  const recepcionesParciales= meta.recepciones_parciales||[];
-
-  const isDeliveryAction = a => ["Marcar Entregado","Marcar Recibido"].includes(a.label);
-  const hasDelivery  = actions.some(isDeliveryAction);
-  const canManageProvs = user.role==="compras"||user.role==="director"||(user.role==="arquitecto"&&pedido.tipo==="licitacion");
-  const isActive = ACTIVE_ESTADOS.includes(pedido.estado);
-
-  function toggleEnProceso(){
-    onUpdateMeta({...meta, en_proceso:!meta.en_proceso});
-  }
-  function addProveedor(){
-    if(!provNombre.trim()) return;
-    onUpdateMeta({...meta, proveedores_cotizacion:[...proveedores,{id:uid(),nombre:provNombre.trim(),estado:"enviado_a_cotizar",ts:Date.now()}]});
-    setProvNombre("");
-  }
-  function updateProvEstado(id,estado){
-    onUpdateMeta({...meta, proveedores_cotizacion:proveedores.map(p=>p.id===id?{...p,estado}:p)});
-  }
-  function removeProveedor(id){
-    onUpdateMeta({...meta, proveedores_cotizacion:proveedores.filter(p=>p.id!==id)});
-  }
+  function toggleEnProceso(){onUpdateMeta({...meta,en_proceso:!meta.en_proceso});}
+  function addProveedor(){if(!provNombre.trim())return;onUpdateMeta({...meta,proveedores_cotizacion:[...proveedores,{id:uid(),nombre:provNombre.trim(),estado:"enviado_a_cotizar",ts:Date.now()}]});setProvNombre("");}
+  function updateProvEstado(id,estado){onUpdateMeta({...meta,proveedores_cotizacion:proveedores.map(p=>p.id===id?{...p,estado}:p)});}
+  function removeProveedor(id){onUpdateMeta({...meta,proveedores_cotizacion:proveedores.filter(p=>p.id!==id)});}
 
   function handleDelivery(action){
     if(!fechaRecepcion){alert("Ingresá la fecha de recepción");return;}
     if(recepTipo==="parcial"){
       if(!recibidoDesc.trim()){alert("Detallá qué se recibió");return;}
-      const nuevaRecep={id:uid(),fecha:fechaRecepcion,nro_remito:nroRemito,recibido:recibidoDesc,pendiente:pendienteDesc,ts:Date.now(),usuario:user.name};
-      const extraMeta={recepciones_parciales:[...recepcionesParciales,nuevaRecep]};
-      const parcialAction={label:"Recepción Parcial registrada",newEstado:pedido.estado};
-      onSimpleAction(pedido,parcialAction,`Recibido: ${recibidoDesc}${pendienteDesc?`. Pendiente: ${pendienteDesc}`:""}`,extraMeta);
-    } else {
-      const extra={fecha_recepcion:fechaRecepcion,nro_remito:nroRemito};
-      onSimpleAction(pedido,action,comment,extra);
+      const nueva={id:uid(),fecha:fechaRecepcion,nro_remito:nroRemito,recibido:recibidoDesc,pendiente:pendienteDesc,ts:Date.now(),usuario:user.name};
+      onSimpleAction(pedido,{label:"Recepción Parcial",newEstado:pedido.estado},`Recibido: ${recibidoDesc}${pendienteDesc?`. Pend: ${pendienteDesc}`:""}`,{recepciones_parciales:[...(meta.recepciones_parciales||[]),nueva]});
+    }else{
+      onSimpleAction(pedido,action,comment,{fecha_recepcion:fechaRecepcion,nro_remito:nroRemito});
     }
-    setFechaRecepcion(""); setNroRemito(""); setRecibidoDesc(""); setPendienteDesc(""); setRecepTipo("total"); setComment("");
+    setFechaRecepcion("");setNroRemito("");setRecibidoDesc("");setPendienteDesc("");setRecepTipo("total");setComment("");
   }
 
-  const PROV_EST={
-    enviado_a_cotizar:{label:"Enviado a cotizar",color:"bg-sky-100 text-sky-700"},
-    presup_recibido:  {label:"Presup. recibido", color:"bg-green-100 text-green-700"},
-    recibido_con_error:{label:"Recibido con error",color:"bg-red-100 text-red-700"},
-  };
+  const est=ESTADOS[pedido.estado]||{label:pedido.estado.toUpperCase(),color:TM};
+  const tip=TIPOS[pedido.tipo]||{label:pedido.tipo,color:TM};
 
   return(
-    <div className="max-w-2xl">
-      <div className="flex items-center justify-between mb-4">
-        <button onClick={onBack} className="text-slate-500 hover:text-slate-700 text-sm flex items-center gap-1">← Volver</button>
-        {onDelete&&!["archivado","rechazado"].includes(pedido.estado)&&(
-          <button onClick={onDelete} className="text-xs bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1.5 rounded-lg">🗑️ Eliminar pedido</button>
-        )}
+    <div style={{maxWidth:680}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
+        <button onClick={onBack} style={{...btnS("ghost"),padding:"0",color:TM,letterSpacing:"0.08em",fontSize:11}}>← VOLVER</button>
+        {onDelete&&isActive&&<button onClick={onDelete} style={{...btnS("danger"),padding:"6px 12px",fontSize:10}}>Eliminar pedido</button>}
       </div>
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
 
-        {/* Header */}
-        <div className="flex flex-wrap items-center gap-2 mb-3">
-          <span className="font-mono text-sm font-bold text-slate-600">{pedido.referencia}</span>
-          <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${TIPO_CLR[pedido.tipo]}`}>{TL[pedido.tipo]}</span>
-          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${EC[pedido.estado]}`}>{EL[pedido.estado]}</span>
-          {pedido.urgencia&&<span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${UC[pedido.urgencia]}`}>⚡ {pedido.urgencia}</span>}
-          {meta.en_proceso&&<span className="text-xs font-medium px-2 py-0.5 rounded-full bg-yellow-200 text-yellow-800">🔄 En proceso</span>}
+      <div style={{...css.card,padding:"24px 28px"}}>
+        {/* Header del pedido */}
+        <div style={{borderBottom:`1px solid ${BD}`,paddingBottom:16,marginBottom:20}}>
+          <div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:10,marginBottom:10}}>
+            <span style={{fontFamily:"monospace",fontWeight:700,fontSize:13,color:TX}}>{pedido.referencia}</span>
+            <span style={{...css.lbl,color:tip.color,border:`1px solid ${tip.color}`,padding:"3px 8px",fontSize:9}}>{tip.label.toUpperCase()}</span>
+            <span style={{...css.lbl,color:est.color,border:`1px solid ${est.color}`,padding:"3px 8px",fontSize:9}}>{est.label}</span>
+            {pedido.urgencia&&<span style={{...css.lbl,color:URG[pedido.urgencia].color,fontSize:9}}>{URG[pedido.urgencia].label}</span>}
+            {meta.en_proceso&&<span style={{...css.lbl,color:"#C47820",border:"1px solid #C47820",padding:"3px 8px",fontSize:9}}>🔄 EN PROCESO</span>}
+          </div>
+          <h2 style={{fontSize:20,fontWeight:800,color:TX,margin:0,letterSpacing:"-0.3px"}}>{pedido.titulo}</h2>
+          <div style={{fontSize:12,color:TM,marginTop:4}}>🏢 {pedido.obraNombre}</div>
+          {pedido.fechaEntrega&&<div style={{fontSize:12,color:TX,marginTop:4}}>📅 Entrega esperada: <b>{pedido.fechaEntrega}</b></div>}
         </div>
-        <h2 className="text-xl font-bold text-slate-800">{pedido.titulo}</h2>
-        <p className="text-sm text-slate-500 mt-1">🏢 {pedido.obraNombre}</p>
-        {pedido.fechaEntrega&&<p className="text-sm text-slate-600 mt-1">📅 Entrega esperada: <b>{pedido.fechaEntrega}</b></p>}
+
         {pedido.descripcion&&(
-          <div className="mt-3 bg-slate-50 rounded-lg p-3 border border-slate-100">
-            <p className="text-xs font-medium text-slate-500 mb-1">Observaciones</p>
-            <p className="text-sm text-slate-600">{pedido.descripcion}</p>
+          <div style={{borderLeft:`3px solid ${BD}`,paddingLeft:12,marginBottom:20}}>
+            <div style={{...css.lbl,color:TM,fontSize:9,marginBottom:4}}>Observaciones</div>
+            <div style={{fontSize:13,color:TX}}>{pedido.descripcion}</div>
           </div>
         )}
 
         {/* Toggle En Proceso */}
         {(user.role==="compras"||user.role==="director")&&isActive&&(
-          <div className="mt-4 flex items-center gap-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+          <div style={{border:`1px solid #C47820`,padding:"12px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12}}>
             <button type="button" onClick={toggleEnProceso}
-              className={`relative w-11 h-6 rounded-full transition flex-shrink-0 ${meta.en_proceso?"bg-yellow-500":"bg-slate-300"}`}>
-              <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${meta.en_proceso?"left-5":"left-0.5"}`}/>
+              style={{position:"relative",width:36,height:20,borderRadius:10,border:"none",background:meta.en_proceso?"#C47820":BD,cursor:"pointer",flexShrink:0}}>
+              <span style={{position:"absolute",top:2,width:16,height:16,borderRadius:8,background:"#fff",boxShadow:"0 1px 2px rgba(0,0,0,0.2)",left:meta.en_proceso?18:2,transition:"left 0.15s"}}/>
             </button>
-            <div>
-              <p className="text-sm font-medium text-yellow-800">En proceso</p>
-              <p className="text-xs text-yellow-600">{meta.en_proceso?"Compras está trabajando en esta orden":"Marcar cuando estés trabajando en esta orden"}</p>
-            </div>
+            <div style={{...css.lbl,color:"#C47820",fontSize:9}}>{meta.en_proceso?"EN PROCESO — Compras está trabajando en esta orden":"Marcar como en proceso"}</div>
           </div>
         )}
 
         {/* Datos de la compra */}
         {meta.proveedor&&(
-          <div className="mt-4 bg-blue-50 rounded-lg p-4 border border-blue-100 space-y-1">
-            <p className="text-xs font-semibold text-blue-700 mb-2">📋 Datos de la compra</p>
-            {meta.proveedor&&<InfoRow label="Proveedor" val={meta.proveedor}/>}
-            {meta.contacto_nombre&&<InfoRow label="Contacto" val={meta.contacto_nombre}/>}
-            {meta.contacto_tel&&<InfoRow label="Teléfono" val={meta.contacto_tel}/>}
-            {meta.contacto_mail&&<InfoRow label="Mail" val={meta.contacto_mail}/>}
-            {meta.monto&&<InfoRow label="Monto" val={fmtMoney(meta.monto)}/>}
-            {meta.tipo_pago&&<InfoRow label="Forma de pago" val={{contra_entrega:"Contra entrega",anticipado:"Anticipado",pago_parcial:"Pago parcial anticipado"}[meta.tipo_pago]||meta.tipo_pago}/>}
-            {meta.info_pago&&<InfoRow label="Info. pago" val={meta.info_pago}/>}
-            {meta.info_entrega&&<InfoRow label="Info. entrega" val={meta.info_entrega}/>}
-            {meta.condiciones_pago&&<InfoRow label="Cond. pago" val={meta.condiciones_pago}/>}
-            {meta.condiciones_entrega&&<InfoRow label="Cond. entrega" val={meta.condiciones_entrega}/>}
-            {meta.firma_contrato!==undefined&&<InfoRow label="Firma contrato" val={meta.firma_contrato?"Sí":"No"}/>}
-            {meta.firma_contrato&&meta.anexos&&<InfoRow label="Anexos" val={meta.anexos}/>}
-          </div>
-        )}
-
-        {/* Recepciones parciales registradas */}
-        {recepcionesParciales.length>0&&(
-          <div className="mt-4 border border-orange-200 rounded-lg overflow-hidden">
-            <div className="bg-orange-50 px-4 py-2 border-b border-orange-200">
-              <p className="text-xs font-semibold text-orange-700">📦 Recepciones parciales ({recepcionesParciales.length})</p>
-            </div>
-            <div className="divide-y divide-orange-100">
-              {recepcionesParciales.map((r,i)=>(
-                <div key={i} className="p-3 text-xs space-y-1">
-                  <div className="flex items-center gap-2 text-slate-500">
-                    <span className="font-medium text-slate-700">Recepción {i+1}</span>
-                    <span>·</span><span>{r.fecha}</span>
-                    {r.nro_remito&&<><span>·</span><span>Remito: {r.nro_remito}</span></>}
-                    <span>·</span><span>{r.usuario}</span>
-                  </div>
-                  <p className="text-green-700"><b>Recibido:</b> {r.recibido}</p>
-                  {r.pendiente&&<p className="text-orange-700"><b>Pendiente:</b> {r.pendiente}</p>}
+          <div style={{border:`1px solid ${BD}`,padding:"16px",marginBottom:16}}>
+            <div style={{...css.lbl,color:G,fontSize:9,marginBottom:10}}>Datos de la compra</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 16px"}}>
+              {[[meta.proveedor,"Proveedor"],[meta.contacto_nombre,"Contacto"],[meta.contacto_tel,"Teléfono"],[meta.contacto_mail,"Mail"],[meta.monto?fmtMoney(meta.monto):null,"Monto"],[meta.tipo_pago?({contra_entrega:"Contra entrega",anticipado:"Anticipado",pago_parcial:"Pago parcial"}[meta.tipo_pago]):null,"Forma de pago"],[meta.info_pago,"Info pago"],[meta.info_entrega,"Info entrega"],[meta.condiciones_pago,"Cond. pago"],[meta.condiciones_entrega,"Cond. entrega"],[meta.firma_contrato!==undefined?meta.firma_contrato?"Sí":"No":null,"Firma contrato"],[meta.firma_contrato&&meta.anexos?meta.anexos:null,"Anexos"]].filter(([v])=>v).map(([v,l])=>(
+                <div key={l}>
+                  <div style={{...css.lbl,color:TM,fontSize:8}}>{l}</div>
+                  <div style={{fontSize:12,color:TX,marginTop:1}}>{v}</div>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Dato de recepción total */}
+        {/* Recepciones parciales */}
+        {recepParciales.length>0&&(
+          <div style={{border:`1px solid #C47820`,marginBottom:16}}>
+            <div style={{...css.lbl,color:"#C47820",fontSize:9,padding:"8px 14px",borderBottom:`1px solid #C47820`}}>RECEPCIONES PARCIALES ({recepParciales.length})</div>
+            {recepParciales.map((r,i)=>(
+              <div key={i} style={{padding:"10px 14px",borderBottom:i<recepParciales.length-1?`1px solid ${BD}`:"none"}}>
+                <div style={{...css.lbl,color:TM,fontSize:9}}>{r.fecha}{r.nro_remito?` · Remito: ${r.nro_remito}`:""} · {r.usuario}</div>
+                <div style={{fontSize:12,color:"#2D7A3A",marginTop:3}}><b>Recibido:</b> {r.recibido}</div>
+                {r.pendiente&&<div style={{fontSize:12,color:"#C47820",marginTop:2}}><b>Pendiente:</b> {r.pendiente}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Recepción total */}
         {meta.fecha_recepcion&&(
-          <div className="mt-4 bg-green-50 rounded-lg p-4 border border-green-100 space-y-1">
-            <p className="text-xs font-semibold text-green-700 mb-2">✅ Recepción total</p>
-            <InfoRow label="Fecha" val={meta.fecha_recepcion}/>
-            {meta.nro_remito&&<InfoRow label="N° de remito" val={meta.nro_remito}/>}
+          <div style={{borderLeft:`3px solid #2D7A3A`,paddingLeft:12,marginBottom:16}}>
+            <div style={{...css.lbl,color:"#2D7A3A",fontSize:9}}>✓ RECEPCIÓN TOTAL</div>
+            <div style={{fontSize:12,color:TX,marginTop:2}}>{meta.fecha_recepcion}{meta.nro_remito?` · Remito: ${meta.nro_remito}`:""}</div>
           </div>
         )}
 
-        {/* Proveedores consultados */}
+        {/* Proveedores */}
         {canManageProvs&&(
-          <div className="mt-4 border border-slate-200 rounded-lg overflow-hidden">
-            <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
-              <p className="text-xs font-semibold text-slate-600">📨 Proveedores consultados</p>
-            </div>
-            <div className="p-4 space-y-3">
-              {proveedores.length===0&&<p className="text-xs text-slate-400 text-center py-2">Todavía no se agregaron proveedores</p>}
-              {proveedores.map(p=>(
-                <div key={p.id} className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-medium text-slate-700 flex-1 min-w-0 truncate">{p.nombre}</span>
-                  <div className="flex gap-1 flex-wrap">
-                    {Object.entries(PROV_EST).map(([k,v])=>(
-                      <button key={k} onClick={()=>updateProvEstado(p.id,k)}
-                        className={`text-xs px-2 py-1 rounded-full border transition ${p.estado===k?v.color+" border-transparent font-medium":"bg-white text-slate-400 border-slate-200 hover:border-slate-300"}`}>
-                        {v.label}
-                      </button>
-                    ))}
-                  </div>
-                  <button onClick={()=>removeProveedor(p.id)} className="text-slate-300 hover:text-red-400 text-xs px-1">✕</button>
+          <div style={{border:`1px solid ${BD}`,marginBottom:16}}>
+            <div style={{...css.lbl,color:TM,fontSize:9,padding:"8px 14px",borderBottom:`1px solid ${BD}`}}>Proveedores consultados</div>
+            {proveedores.length===0&&<div style={{fontSize:12,color:TM,padding:"10px 14px"}}>Sin proveedores cargados</div>}
+            {proveedores.map(p=>(
+              <div key={p.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 14px",borderBottom:`1px solid ${BD}`,flexWrap:"wrap"}}>
+                <span style={{fontSize:13,color:TX,flex:1,minWidth:0}}>{p.nombre}</span>
+                <div style={{display:"flex",gap:4}}>
+                  {Object.entries(PROV_EST).map(([k,v])=>(
+                    <button key={k} onClick={()=>updateProvEstado(p.id,k)}
+                      style={{fontSize:10,padding:"3px 8px",cursor:"pointer",letterSpacing:"0.06em",fontFamily:"inherit",border:`1px solid ${p.estado===k?v.color:BD}`,background:p.estado===k?v.color:"transparent",color:p.estado===k?"#fff":TM,fontWeight:p.estado===k?700:400}}>
+                      {v.label}
+                    </button>
+                  ))}
                 </div>
-              ))}
-              {isActive&&(
-                <div className="flex gap-2 pt-1 border-t border-slate-100">
-                  <input className="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-sm"
-                    placeholder="Nombre del proveedor..."
-                    value={provNombre} onChange={e=>setProvNombre(e.target.value)}
-                    onKeyDown={e=>e.key==="Enter"&&addProveedor()}/>
-                  <button onClick={addProveedor} className="bg-slate-800 hover:bg-slate-700 text-white text-xs px-3 py-1.5 rounded-lg">+ Agregar</button>
-                </div>
-              )}
-            </div>
+                <button onClick={()=>removeProveedor(p.id)} style={{background:"none",border:"none",cursor:"pointer",color:TM,fontSize:12}}>✕</button>
+              </div>
+            ))}
+            {isActive&&(
+              <div style={{display:"flex",borderTop:proveedores.length>0?`1px solid ${BD}`:"none"}}>
+                <input style={{...css.input,border:"none",flex:1}} placeholder="Nombre del proveedor..." value={provNombre} onChange={e=>setProvNombre(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addProveedor()}/>
+                <button onClick={addProveedor} style={{...btnS("outline"),borderLeft:`1px solid ${BD}`,whiteSpace:"nowrap",padding:"10px 14px"}}>+ Agregar</button>
+              </div>
+            )}
           </div>
         )}
 
         {/* Acciones */}
         {actions.length>0&&(
-          <div className="mt-5 border-t border-slate-100 pt-5">
-            <h3 className="font-semibold text-slate-700 mb-3">Tu acción requerida</h3>
-
-            {/* Formulario de entrega */}
+          <div style={{borderTop:`1px solid ${BD}`,paddingTop:20,marginTop:8}}>
+            <div style={{...css.lbl,color:TX,fontSize:10,marginBottom:14}}>Tu acción requerida</div>
             {hasDelivery&&(
-              <div className="border border-slate-200 rounded-lg overflow-hidden mb-4">
-                <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
-                  <p className="text-xs font-semibold text-slate-600">📦 Datos de recepción</p>
+              <div style={{border:`1px solid ${BD}`,padding:"16px",marginBottom:14}}>
+                <div style={{...css.lbl,color:TM,fontSize:9,marginBottom:12}}>Datos de recepción</div>
+                <div style={{display:"flex",gap:0,marginBottom:12}}>
+                  {[["total","✓ Recepción Total"],["parcial","⚠ Recepción Parcial"]].map(([v,l],i)=>(
+                    <button key={v} type="button" onClick={()=>setRecepTipo(v)}
+                      style={{flex:1,padding:"9px 8px",fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:700,cursor:"pointer",fontFamily:"inherit",border:`1px solid ${BD}`,borderLeft:i>0?"none":undefined,background:recepTipo===v?(v==="total"?"#2D7A3A":"#C47820"):"transparent",color:recepTipo===v?"#fff":TM}}>
+                      {l}
+                    </button>
+                  ))}
                 </div>
-                <div className="p-4 space-y-3">
-                  {/* Tipo de recepción */}
-                  <div className="flex gap-2">
-                    {[["total","✅ Recepción Total"],["parcial","⚠️ Recepción Parcial"]].map(([v,l])=>(
-                      <button key={v} type="button" onClick={()=>setRecepTipo(v)}
-                        className={`flex-1 py-2 rounded-lg text-sm font-medium border-2 transition ${recepTipo===v?(v==="total"?"border-green-500 bg-green-50 text-green-700":"border-orange-400 bg-orange-50 text-orange-700"):"border-slate-200 text-slate-400"}`}>
-                        {l}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <Fld label="Fecha de recepción *">
-                      <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-                        value={fechaRecepcion} onChange={e=>setFechaRecepcion(e.target.value)}/>
-                    </Fld>
-                    <Fld label="N° de remito">
-                      <input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-                        placeholder="0001-00012345"
-                        value={nroRemito} onChange={e=>setNroRemito(e.target.value)}/>
-                    </Fld>
-                  </div>
-
-                  {recepTipo==="parcial"&&(
-                    <>
-                      <Fld label="¿Qué se recibió? *">
-                        <textarea className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" rows={2}
-                          placeholder="Detallá los items o cantidades recibidas..."
-                          value={recibidoDesc} onChange={e=>setRecibidoDesc(e.target.value)}/>
-                      </Fld>
-                      <Fld label="¿Qué queda pendiente?">
-                        <textarea className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" rows={2}
-                          placeholder="Detallá los items o cantidades que faltan..."
-                          value={pendienteDesc} onChange={e=>setPendienteDesc(e.target.value)}/>
-                      </Fld>
-                    </>
-                  )}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:recepTipo==="parcial"?10:0}}>
+                  <Fld label="Fecha *"><input type="date" style={css.input} value={fechaRecepcion} onChange={e=>setFechaRecepcion(e.target.value)}/></Fld>
+                  <Fld label="N° Remito"><input style={css.input} placeholder="0001-000123" value={nroRemito} onChange={e=>setNroRemito(e.target.value)}/></Fld>
                 </div>
+                {recepTipo==="parcial"&&(
+                  <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                    <Fld label="¿Qué se recibió? *"><textarea style={{...css.ta,height:56}} placeholder="Detallá items o cantidades recibidas..." value={recibidoDesc} onChange={e=>setRecibidoDesc(e.target.value)}/></Fld>
+                    <Fld label="¿Qué queda pendiente?"><textarea style={{...css.ta,height:56}} placeholder="Detallá lo que falta..." value={pendienteDesc} onChange={e=>setPendienteDesc(e.target.value)}/></Fld>
+                  </div>
+                )}
               </div>
             )}
-
             {!actions.some(a=>a.formType)&&!hasDelivery&&(
-              <textarea className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none mb-3" rows={2}
-                placeholder="Comentario opcional..." value={comment} onChange={e=>setComment(e.target.value)}/>
+              <textarea style={{...css.ta,height:60,marginBottom:12}} placeholder="Comentario opcional..." value={comment} onChange={e=>setComment(e.target.value)}/>
             )}
-
-            <div className="flex flex-wrap gap-2">
+            <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
               {actions.map(a=>(
                 <button key={a.label} onClick={()=>{
                   if(a.formType){onFormAction(a);return;}
-                  if(isDeliveryAction(a)){handleDelivery(a);return;}
+                  if(isDelivery(a)){handleDelivery(a);return;}
                   onSimpleAction(pedido,a,comment).then(()=>setComment(""));
-                }} className={`px-4 py-2 rounded-lg text-sm font-medium transition ${BC[a.color]}`}>
-                  {isDeliveryAction(a)&&hasDelivery
-                    ? recepTipo==="parcial" ? "Registrar Recepción Parcial" : a.label
-                    : a.label}
+                }} style={btnS(ACT_BTN[a.color]||"primary")}>
+                  {isDelivery(a)&&hasDelivery?(recepTipo==="parcial"?"Registrar Parcial":a.label):a.label}
                 </button>
               ))}
             </div>
@@ -988,16 +788,16 @@ function DetailView({pedido, user, onSimpleAction, onFormAction, onDelete, onBac
         )}
 
         {/* Historial */}
-        <div className="mt-5 border-t border-slate-100 pt-5">
-          <h3 className="font-semibold text-slate-700 mb-3">Historial</h3>
-          <div className="space-y-3">
+        <div style={{borderTop:`1px solid ${BD}`,paddingTop:20,marginTop:20}}>
+          <div style={{...css.lbl,color:TM,fontSize:9,marginBottom:14}}>Historial</div>
+          <div style={{display:"flex",flexDirection:"column",gap:0}}>
             {[...pedido.historial].reverse().map((h,i)=>(
-              <div key={i} className="flex gap-3 text-sm">
-                <div className="flex-shrink-0 mt-1.5 w-2 h-2 rounded-full bg-slate-400"/>
+              <div key={i} style={{display:"flex",gap:14,paddingTop:i>0?10:0,marginTop:i>0?10:0,borderTop:i>0?`1px solid ${BD}`:"none"}}>
+                <div style={{width:6,height:6,background:G,marginTop:5,flexShrink:0}}/>
                 <div>
-                  <span className="font-medium text-slate-700">{h.accion}</span>
-                  <span className="text-slate-400"> · {h.usuario} ({h.rol}) · {fmtDate(h.ts)}</span>
-                  {h.comentario&&<p className="text-slate-500 mt-0.5 italic">"{h.comentario}"</p>}
+                  <span style={{fontSize:12,fontWeight:700,color:TX}}>{h.accion}</span>
+                  <span style={{fontSize:11,color:TM}}> · {h.usuario} ({h.rol}) · {fmtDate(h.ts)}</span>
+                  {h.comentario&&<div style={{fontSize:12,color:TM,marginTop:3,fontStyle:"italic"}}>"{h.comentario}"</div>}
                 </div>
               </div>
             ))}
@@ -1007,183 +807,197 @@ function DetailView({pedido, user, onSimpleAction, onFormAction, onDelete, onBac
     </div>
   );
 }
-// ── Action Modal ────────────────────────────────────────────────
-function ActionModal({modal, onSubmit, onClose}){
-  const {action, pedido} = modal;
-  const ft = action.formType;
-  const meta = pedido.metadata||{};
-  const [f, setF] = useState({
-    proveedor:"", contacto_nombre:"", contacto_tel:"", contacto_mail:"",
-    monto:"", info_pago:"", info_entrega:"", tipo_pago:"",
-    condiciones_pago:"", condiciones_entrega:"",
-    firma_contrato:false, anexos:"", comment:"",
-  });
-  const [err, setErr]=useState("");
-  const set = k => e => setF(p=>({...p,[k]:e.target?e.target.value:e}));
 
-  function handleSubmit(){
+// ── Action Modal ───────────────────────────────────────────────
+function ActionModal({modal,onSubmit,onClose}){
+  const{action,pedido}=modal;
+  const ft=action.formType;
+  const meta=pedido.metadata||{};
+  const[f,setF]=useState({proveedor:"",contacto_nombre:"",contacto_tel:"",contacto_mail:"",monto:"",info_pago:"",info_entrega:"",tipo_pago:"",condiciones_pago:"",condiciones_entrega:"",firma_contrato:false,anexos:"",comment:""});
+  const[err,setErr]=useState("");
+  const set=k=>e=>setF(p=>({...p,[k]:e.target?e.target.value:e}));
+  const routeInfo=meta.route?{contra_entrega:"Contra entrega",anticipado:"Anticipado",pago_parcial:"Pago parcial"}[meta.route]:null;
+
+  function submit(){
     setErr("");
-    if(ft==="approve_cc"){
-      if(!f.proveedor||!f.contacto_nombre||!f.monto||!f.tipo_pago||!f.info_pago||!f.info_entrega)
-        {setErr("Completá todos los campos obligatorios");return;}
-    }
-    if(ft==="approve_dir_grande"){
-      if(!f.proveedor||!f.contacto_nombre||!f.tipo_pago||!f.condiciones_pago||!f.condiciones_entrega)
-        {setErr("Completá todos los campos obligatorios");return;}
-    }
-    if(ft==="approve_dir_licitacion"||ft==="approve_dir_acopio"){
-      if(!f.proveedor||!f.contacto_nombre)
-        {setErr("Proveedor y contacto son obligatorios");return;}
-      if(f.firma_contrato&&!f.anexos){setErr("Especificá los anexos a firmar");return;}
-    }
+    if(ft==="approve_cc"&&(!f.proveedor||!f.contacto_nombre||!f.monto||!f.tipo_pago||!f.info_pago||!f.info_entrega)){setErr("Completá todos los campos obligatorios");return;}
+    if(ft==="approve_dir_grande"&&(!f.proveedor||!f.contacto_nombre||!f.tipo_pago)){setErr("Completá todos los campos obligatorios");return;}
+    if((ft==="approve_dir_licitacion"||ft==="approve_dir_acopio")&&(!f.proveedor||!f.contacto_nombre)){setErr("Proveedor y contacto son obligatorios");return;}
+    if((ft==="approve_dir_licitacion"||ft==="approve_dir_acopio")&&f.firma_contrato&&!f.anexos){setErr("Especificá los anexos a firmar");return;}
     onSubmit(f);
   }
 
-  const routeInfo = meta.route ? {contra_entrega:"Contra entrega",anticipado:"Anticipado",pago_parcial:"Pago parcial"}[meta.route] : null;
-
   return(
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg my-4">
-        <h3 className="font-bold text-slate-800 text-lg mb-1">{action.label}</h3>
-        <p className="text-xs text-slate-400 mb-5">{pedido.referencia} · {TL[pedido.tipo]}</p>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:24,overflowY:"auto"}}>
+      <div style={{background:CB,border:`1px solid ${BD}`,padding:28,width:"100%",maxWidth:520,margin:"auto"}}>
+        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:20,borderBottom:`1px solid ${BD}`,paddingBottom:14}}>
+          <div>
+            <div style={{...css.lbl,color:TX,fontSize:11}}>{action.label}</div>
+            <div style={{fontFamily:"monospace",fontSize:11,color:TM,marginTop:3}}>{pedido.referencia} · {TL[pedido.tipo]}</div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:TM,lineHeight:1}}>×</button>
+        </div>
 
-        <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
-
-          {/* approve_cc_dir: Director approves chica >4M (info already loaded by compras) */}
+        <div style={{maxHeight:"60vh",overflowY:"auto",display:"flex",flexDirection:"column",gap:14,paddingRight:4}}>
           {ft==="approve_cc_dir"&&(
-            <div className="bg-blue-50 rounded-lg p-4 border border-blue-100 space-y-1 text-sm">
-              <p className="font-semibold text-blue-800 mb-2">Datos cargados por Compras:</p>
-              {meta.proveedor&&<InfoRow label="Proveedor" val={meta.proveedor}/>}
-              {meta.contacto_nombre&&<InfoRow label="Contacto" val={meta.contacto_nombre}/>}
-              {meta.monto&&<InfoRow label="Monto" val={fmtMoney(meta.monto)}/>}
-              {routeInfo&&<InfoRow label="Forma de pago" val={routeInfo}/>}
-              <p className="text-blue-600 text-xs mt-2">⚠️ El monto supera $4.000.000. Requiere tu aprobación.</p>
+            <div style={{border:`1px solid ${G}`,padding:"14px 16px"}}>
+              <div style={{...css.lbl,color:G,fontSize:9,marginBottom:10}}>Datos cargados por Compras</div>
+              {[[meta.proveedor,"Proveedor"],[meta.contacto_nombre,"Contacto"],[meta.monto?fmtMoney(meta.monto):null,"Monto"],[routeInfo,"Forma de pago"]].filter(([v])=>v).map(([v,l])=>(
+                <div key={l} style={{display:"flex",gap:10,marginBottom:4}}>
+                  <span style={{...css.lbl,color:TM,fontSize:8,width:80,flexShrink:0}}>{l}</span>
+                  <span style={{fontSize:12,color:TX,fontWeight:600}}>{v}</span>
+                </div>
+              ))}
+              <div style={{...css.lbl,color:"#C47820",fontSize:9,marginTop:10}}>⚠ Monto supera $4.000.000 — Requiere aprobación de Dirección</div>
             </div>
           )}
 
-          {/* approve_cc: Compras approves compra chica */}
           {ft==="approve_cc"&&<>
-            <Fld label="Proveedor elegido *"><input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="Nombre del proveedor" value={f.proveedor} onChange={set("proveedor")}/></Fld>
-            <div className="grid grid-cols-2 gap-3">
-              <Fld label="Nombre contacto *"><input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" value={f.contacto_nombre} onChange={set("contacto_nombre")}/></Fld>
-              <Fld label="Teléfono contacto *"><input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" value={f.contacto_tel} onChange={set("contacto_tel")}/></Fld>
+            <Fld label="Proveedor elegido *"><input style={css.input} value={f.proveedor} onChange={set("proveedor")}/></Fld>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              <Fld label="Nombre contacto *"><input style={css.input} value={f.contacto_nombre} onChange={set("contacto_nombre")}/></Fld>
+              <Fld label="Teléfono *"><input style={css.input} value={f.contacto_tel} onChange={set("contacto_tel")}/></Fld>
             </div>
-            <Fld label="Monto (ARS) *"><input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="Ej: 250000" value={f.monto} onChange={set("monto")}/>
-              {parseFloat(f.monto)>4_000_000&&<p className="text-orange-600 text-xs mt-1">⚠️ Monto supera $4.000.000 → irá a Dirección para aprobación</p>}
+            <Fld label="Monto (ARS) *">
+              <input type="number" style={css.input} placeholder="Ej: 250000" value={f.monto} onChange={set("monto")}/>
+              {parseFloat(f.monto)>4_000_000&&<div style={{...css.lbl,color:"#C47820",fontSize:9,marginTop:4}}>⚠ Supera $4.000.000 → irá a Dirección para aprobación</div>}
             </Fld>
-            <Fld label="Información para el pago *"><textarea className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" rows={2} placeholder="CBU, alias, etc." value={f.info_pago} onChange={set("info_pago")}/></Fld>
-            <Fld label="Información para la entrega *"><textarea className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" rows={2} placeholder="Dirección, horario, contacto en obra, etc." value={f.info_entrega} onChange={set("info_entrega")}/></Fld>
+            <Fld label="Info. para el pago *"><textarea style={{...css.ta,height:60}} placeholder="CBU, alias, etc." value={f.info_pago} onChange={set("info_pago")}/></Fld>
+            <Fld label="Info. para la entrega *"><textarea style={{...css.ta,height:60}} placeholder="Dirección, horario, contacto en obra..." value={f.info_entrega} onChange={set("info_entrega")}/></Fld>
             <Fld label="Forma de pago *">
-              <div className="flex gap-2">
-                {[["contra_entrega","Contra Entrega"],["anticipado","Anticipado"]].map(([v,l])=>(
+              <div style={{display:"flex",gap:0}}>
+                {[["contra_entrega","Contra Entrega"],["anticipado","Anticipado"]].map(([v,l],i)=>(
                   <button key={v} type="button" onClick={()=>setF(p=>({...p,tipo_pago:v}))}
-                    className={`flex-1 py-2 rounded-lg text-sm font-medium border-2 transition ${f.tipo_pago===v?"border-slate-700 bg-slate-800 text-white":"border-slate-200 text-slate-500"}`}>{l}</button>
+                    style={{flex:1,padding:"10px 8px",fontSize:11,letterSpacing:"0.1em",textTransform:"uppercase",fontWeight:700,cursor:"pointer",fontFamily:"inherit",border:`1px solid ${BD}`,borderLeft:i>0?"none":undefined,background:f.tipo_pago===v?TX:"transparent",color:f.tipo_pago===v?"#fff":TM}}>
+                    {l}
+                  </button>
                 ))}
               </div>
             </Fld>
           </>}
 
-          {/* approve_dir_grande: Director approves compra grande */}
           {ft==="approve_dir_grande"&&<>
-            <Fld label="Proveedor *"><input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" value={f.proveedor} onChange={set("proveedor")}/></Fld>
-            <div className="grid grid-cols-2 gap-3">
-              <Fld label="Nombre contacto *"><input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" value={f.contacto_nombre} onChange={set("contacto_nombre")}/></Fld>
-              <Fld label="Teléfono *"><input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" value={f.contacto_tel} onChange={set("contacto_tel")}/></Fld>
+            <Fld label="Proveedor *"><input style={css.input} value={f.proveedor} onChange={set("proveedor")}/></Fld>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              <Fld label="Nombre contacto *"><input style={css.input} value={f.contacto_nombre} onChange={set("contacto_nombre")}/></Fld>
+              <Fld label="Teléfono *"><input style={css.input} value={f.contacto_tel} onChange={set("contacto_tel")}/></Fld>
             </div>
-            <Fld label="Condiciones de pago *"><textarea className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" rows={2} value={f.condiciones_pago} onChange={set("condiciones_pago")}/></Fld>
-            <Fld label="Condiciones de entrega *"><textarea className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" rows={2} value={f.condiciones_entrega} onChange={set("condiciones_entrega")}/></Fld>
+            <Fld label="Condiciones de pago *"><textarea style={{...css.ta,height:60}} value={f.condiciones_pago} onChange={set("condiciones_pago")}/></Fld>
+            <Fld label="Condiciones de entrega *"><textarea style={{...css.ta,height:60}} value={f.condiciones_entrega} onChange={set("condiciones_entrega")}/></Fld>
             <Fld label="Forma de pago *">
-              <div className="flex flex-col gap-2">
+              <div style={{display:"flex",flexDirection:"column",gap:2}}>
                 {[["contra_entrega","Pago contra entrega"],["pago_parcial","Pago parcial anticipado"],["anticipado","Pago anticipado"]].map(([v,l])=>(
                   <button key={v} type="button" onClick={()=>setF(p=>({...p,tipo_pago:v}))}
-                    className={`py-2 px-3 rounded-lg text-sm font-medium border-2 transition text-left ${f.tipo_pago===v?"border-slate-700 bg-slate-800 text-white":"border-slate-200 text-slate-500"}`}>{l}</button>
+                    style={{padding:"10px 14px",fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:700,cursor:"pointer",fontFamily:"inherit",border:`1px solid ${BD}`,textAlign:"left",background:f.tipo_pago===v?TX:"transparent",color:f.tipo_pago===v?"#fff":TM}}>
+                    {l}
+                  </button>
                 ))}
               </div>
             </Fld>
           </>}
 
-          {/* approve_dir_licitacion / approve_dir_acopio */}
           {(ft==="approve_dir_licitacion"||ft==="approve_dir_acopio")&&<>
-            <Fld label="Proveedor *"><input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" value={f.proveedor} onChange={set("proveedor")}/></Fld>
-            <div className="grid grid-cols-2 gap-3">
-              <Fld label="Nombre contacto *"><input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" value={f.contacto_nombre} onChange={set("contacto_nombre")}/></Fld>
-              <Fld label="Teléfono *"><input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" value={f.contacto_tel} onChange={set("contacto_tel")}/></Fld>
+            <Fld label="Proveedor *"><input style={css.input} value={f.proveedor} onChange={set("proveedor")}/></Fld>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              <Fld label="Nombre contacto *"><input style={css.input} value={f.contacto_nombre} onChange={set("contacto_nombre")}/></Fld>
+              <Fld label="Teléfono *"><input style={css.input} value={f.contacto_tel} onChange={set("contacto_tel")}/></Fld>
             </div>
-            <Fld label="Mail de contacto"><input type="email" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" value={f.contacto_mail} onChange={set("contacto_mail")}/></Fld>
-            <Fld label="Condiciones de entrega"><textarea className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" rows={2} value={f.condiciones_entrega} onChange={set("condiciones_entrega")}/></Fld>
-            <Fld label="Condiciones de pago"><textarea className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" rows={2} value={f.condiciones_pago} onChange={set("condiciones_pago")}/></Fld>
-            <div className="flex items-center gap-3">
-              <button type="button" onClick={()=>setF(p=>({...p,firma_contrato:!p.firma_contrato,anexos:""}))} className={`relative w-11 h-6 rounded-full transition ${f.firma_contrato?"bg-slate-800":"bg-slate-300"}`}>
-                <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${f.firma_contrato?"left-5":"left-0.5"}`}/>
+            <Fld label="Mail de contacto"><input type="email" style={css.input} value={f.contacto_mail} onChange={set("contacto_mail")}/></Fld>
+            <Fld label="Condiciones de entrega"><textarea style={{...css.ta,height:56}} value={f.condiciones_entrega} onChange={set("condiciones_entrega")}/></Fld>
+            <Fld label="Condiciones de pago"><textarea style={{...css.ta,height:56}} value={f.condiciones_pago} onChange={set("condiciones_pago")}/></Fld>
+            <div style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",border:`1px solid ${BD}`}}>
+              <button type="button" onClick={()=>setF(p=>({...p,firma_contrato:!p.firma_contrato,anexos:""}))}
+                style={{position:"relative",width:36,height:20,borderRadius:10,border:"none",background:f.firma_contrato?G:BD,cursor:"pointer",flexShrink:0}}>
+                <span style={{position:"absolute",top:2,width:16,height:16,borderRadius:8,background:"#fff",boxShadow:"0 1px 2px rgba(0,0,0,0.15)",left:f.firma_contrato?18:2,transition:"left 0.15s"}}/>
               </button>
-              <span className="text-sm text-slate-600">¿Requiere firma de contrato?</span>
+              <span style={{...css.lbl,color:f.firma_contrato?G:TM,fontSize:10}}>¿Requiere firma de contrato?</span>
             </div>
-            {f.firma_contrato&&(
-              <Fld label="Anexos a firmar *"><textarea className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" rows={3} placeholder="Ej: Anexo A – Especificaciones técnicas, Anexo B – Planos..." value={f.anexos} onChange={set("anexos")}/></Fld>
-            )}
+            {f.firma_contrato&&<Fld label="Anexos a firmar *"><textarea style={{...css.ta,height:72}} placeholder="Ej: Anexo A — Especificaciones técnicas, Anexo B — Planos..." value={f.anexos} onChange={set("anexos")}/></Fld>}
           </>}
 
           <Fld label="Comentario (opcional)">
-            <textarea className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" rows={2} value={f.comment} onChange={set("comment")}/>
+            <textarea style={{...css.ta,height:56}} value={f.comment} onChange={set("comment")}/>
           </Fld>
-          {err&&<p className="text-red-500 text-sm">{err}</p>}
+          {err&&<div style={{color:"#CC3333",fontSize:12,letterSpacing:"0.04em"}}>{err}</div>}
         </div>
 
-        <div className="flex gap-3 pt-4 border-t border-slate-100 mt-4">
-          <button onClick={handleSubmit} className={`px-5 py-2 rounded-lg text-sm font-medium text-white transition ${BC[action.color]}`}>Confirmar</button>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-700 text-sm px-3">Cancelar</button>
+        <div style={{display:"flex",gap:8,paddingTop:16,borderTop:`1px solid ${BD}`,marginTop:16}}>
+          <button onClick={submit} style={btnS(ACT_BTN[action.color]||"primary")}>Confirmar</button>
+          <button onClick={onClose} style={btnS("ghost")}>Cancelar</button>
         </div>
       </div>
     </div>
   );
 }
 
-// ── Small components ────────────────────────────────────────────
-function Fld({label,children}){return <div><label className="block text-sm font-medium text-slate-600 mb-1">{label}</label>{children}</div>;}
-function Empty({icon,title,sub}){return <div className="text-center py-14 text-slate-400"><div className="text-4xl mb-2">{icon}</div><p className="font-medium">{title}</p><p className="text-sm mt-1">{sub}</p></div>;}
-function InfoRow({label,val}){return <div className="flex gap-2 text-xs"><span className="text-slate-500 w-28 flex-shrink-0">{label}:</span><span className="text-slate-700 font-medium">{val}</span></div>;}
-
-function FiltersBar({f,setF,obras,showArchivo}){
+// ── Small components ───────────────────────────────────────────
+function Fld({label,children}){
   return(
-    <div className="flex flex-wrap gap-2 mb-4">
-      <select className="border border-slate-200 rounded-lg px-3 py-1.5 text-xs bg-white" value={f.tipo} onChange={e=>setF(p=>({...p,tipo:e.target.value}))}>
+    <div>
+      <label style={{...css.lbl,color:TM,fontSize:9,display:"block",marginBottom:6}}>{label}</label>
+      {children}
+    </div>
+  );
+}
+function Empty({icon,title,sub}){
+  return(
+    <div style={{textAlign:"center",padding:"60px 0",color:TM}}>
+      <div style={{fontSize:28,fontWeight:900,color:BD,marginBottom:8}}>{icon}</div>
+      <div style={{...css.lbl,color:TM,fontSize:10,marginBottom:4}}>{title}</div>
+      <div style={{fontSize:12,color:TM}}>{sub}</div>
+    </div>
+  );
+}
+function SectionLabel({text}){
+  return <div style={{...css.lbl,color:TX,fontSize:10,marginBottom:14,paddingBottom:10,borderBottom:`1px solid ${BD}`}}>{text}</div>;
+}
+function PCard({p,onClick}){
+  const tip=TIPOS[p.tipo]||{label:p.tipo,color:TM};
+  const est=ESTADOS[p.estado]||{label:p.estado,color:TM};
+  const isArch=["archivado","rechazado"].includes(p.estado);
+  return(
+    <div onClick={onClick} style={{...css.card,padding:"14px 18px",display:"flex",alignItems:"flex-start",gap:12,cursor:"pointer",borderLeft:`3px solid ${isArch?BD:tip.color}`,opacity:isArch?0.6:1,transition:"box-shadow 0.1s"}}
+      onMouseEnter={e=>e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,0.06)"}
+      onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,alignItems:"center",marginBottom:6}}>
+          <span style={{fontFamily:"monospace",fontSize:11,fontWeight:700,color:TM}}>{p.referencia}</span>
+          <span style={{...css.lbl,color:tip.color,fontSize:8}}>{tip.label.toUpperCase()}</span>
+          <span style={{...css.lbl,color:est.color,border:`1px solid ${est.color}`,padding:"2px 6px",fontSize:8}}>{est.label}</span>
+          {p.urgencia&&<span style={{...css.lbl,color:URG[p.urgencia].color,fontSize:8}}>{URG[p.urgencia].label}</span>}
+          {p.metadata?.en_proceso&&<span style={{...css.lbl,color:"#C47820",fontSize:8}}>🔄 EN PROCESO</span>}
+        </div>
+        <div style={{fontWeight:700,fontSize:14,color:TX,marginBottom:2}}>{p.titulo}</div>
+        <div style={{fontSize:11,color:TM}}>🏢 {p.obraNombre}</div>
+        {p.fechaEntrega&&<div style={{fontSize:11,color:TM,marginTop:1}}>📅 {p.fechaEntrega}</div>}
+        <div style={{fontSize:11,color:TM,marginTop:3}}>{p.creado_nombre} · {fmtDate(p.creado_at)}</div>
+      </div>
+      <div style={{color:BD,fontSize:14,marginTop:2}}>›</div>
+    </div>
+  );
+}
+function FiltersBar({f,setF,obras,showArchivo,showEstado}){
+  const selectStyle={...css.input,width:"auto",padding:"7px 10px",fontSize:11};
+  return(
+    <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:16,alignItems:"center"}}>
+      <select style={selectStyle} value={f.tipo} onChange={e=>setF(p=>({...p,tipo:e.target.value}))}>
         <option value="">Todos los tipos</option>
         {Object.entries(TL).map(([k,v])=><option key={k} value={k}>{v}</option>)}
       </select>
-      <select className="border border-slate-200 rounded-lg px-3 py-1.5 text-xs bg-white" value={f.estado} onChange={e=>setF(p=>({...p,estado:e.target.value}))}>
+      {showEstado&&<select style={selectStyle} value={f.estado||""} onChange={e=>setF(p=>({...p,estado:e.target.value}))}>
         <option value="">Todos los estados</option>
-        {Object.entries(EL).map(([k,v])=><option key={k} value={k}>{v}</option>)}
-      </select>
-      {obras.length>0&&<select className="border border-slate-200 rounded-lg px-3 py-1.5 text-xs bg-white" value={f.obraId} onChange={e=>setF(p=>({...p,obraId:e.target.value}))}>
+        {Object.entries(ESTADOS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+      </select>}
+      {obras.length>0&&<select style={selectStyle} value={f.obraId} onChange={e=>setF(p=>({...p,obraId:e.target.value}))}>
         <option value="">Todas las obras</option>
         {obras.map(o=><option key={o.id} value={o.id}>{o.nombre}</option>)}
       </select>}
-      {showArchivo&&<select className="border border-slate-200 rounded-lg px-3 py-1.5 text-xs bg-white" value={f.archivo} onChange={e=>setF(p=>({...p,archivo:e.target.value}))}>
-        <option value="todos">Activos + Archivados</option>
+      {showArchivo&&<select style={selectStyle} value={f.archivo||"activos"} onChange={e=>setF(p=>({...p,archivo:e.target.value}))}>
         <option value="activos">Solo activos</option>
-        <option value="archivados">Solo archivados/rechazados</option>
+        <option value="todos">Activos + Archivados</option>
+        <option value="archivados">Solo archivados</option>
       </select>}
-      {(f.tipo||f.estado||f.obraId)&&<button onClick={()=>setF(p=>({...p,tipo:"",estado:"",obraId:""}))} className="text-xs text-slate-400 hover:text-slate-600 px-1">✕ Limpiar</button>}
-    </div>
-  );
-}
-
-function PCard({p,onClick}){
-  return(
-    <div onClick={onClick} className={`bg-white rounded-xl border p-4 flex items-start gap-3 cursor-pointer hover:shadow-md transition ${["archivado","rechazado"].includes(p.estado)?"border-slate-100 opacity-70":"border-slate-200 hover:border-slate-300"}`}>
-      <div className="flex-1 min-w-0">
-        <div className="flex flex-wrap gap-1.5 mb-1.5 items-center">
-          <span className="font-mono text-xs text-slate-500 font-semibold">{p.referencia}</span>
-          <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${TIPO_CLR[p.tipo]}`}>{TL[p.tipo]}</span>
-          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${EC[p.estado]}`}>{EL[p.estado]}</span>
-          {p.urgencia&&<span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${UC[p.urgencia]}`}>⚡ {p.urgencia}</span>}
-        </div>
-        <p className="font-semibold text-slate-800 truncate">{p.titulo}</p>
-        <p className="text-xs text-slate-500 mt-0.5">🏢 {p.obraNombre}</p>
-        {p.fechaEntrega&&<p className="text-xs text-slate-400 mt-0.5">📅 Entrega: {p.fechaEntrega}</p>}
-        <p className="text-xs text-slate-400 mt-1">Por {p.creado_nombre} · {fmtDate(p.creado_at)}</p>
-      </div>
-      <span className="text-slate-300 text-lg mt-1">›</span>
+      {(f.tipo||f.estado||f.obraId)&&<button onClick={()=>setF(p=>({...p,tipo:"",estado:"",obraId:""}))} style={{...btnS("ghost"),fontSize:10,padding:"7px 10px"}}>✕ Limpiar</button>}
     </div>
   );
 }
