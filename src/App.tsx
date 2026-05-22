@@ -10,9 +10,17 @@ const sb = {
   patch: async(t,id,d) => { const r=await fetch(`${SB_URL}/rest/v1/${t}?id=eq.${encodeURIComponent(id)}`,{method:"PATCH",headers:H,body:JSON.stringify(d)}); if(!r.ok)throw new Error(await r.text()); return r.json(); },
   del:   async(t,id)   => { const r=await fetch(`${SB_URL}/rest/v1/${t}?id=eq.${encodeURIComponent(id)}`,{method:"DELETE",headers:H}); if(!r.ok)throw new Error(await r.text()); },
 };
+
+async function uploadFile(file,pedidoId){
+  const ext=file.name.split('.').pop().toLowerCase();
+  const path=`pedidos/${pedidoId}/${Date.now()}_${Math.random().toString(36).slice(2,5)}.${ext}`;
+  const r=await fetch(`${SB_URL}/storage/v1/object/archivos/${path}`,{method:"POST",headers:{"apikey":SB_KEY,"Authorization":`Bearer ${SB_KEY}`,"Content-Type":file.type},body:file});
+  if(!r.ok)throw new Error(await r.text());
+  return{url:`${SB_URL}/storage/v1/object/public/archivos/${path}`,nombre:file.name,tipo:file.type,ts:Date.now()};
+}
+
 const mapP = p=>({...p,obraId:p.obra_id,obraNombre:p.obra_nombre,fechaEntrega:p.fecha_entrega,historial:p.historial||[],metadata:p.metadata||{}});
 
-// ── Design tokens ──────────────────────────────────────────────
 const G="#1B7B74", TX="#111111", TM="#777777", BG="#FAFAF8", CB="#FFFFFF", BD="#E5E0DA";
 const css = {
   card:  {background:CB,border:`1px solid ${BD}`},
@@ -51,7 +59,6 @@ const btnS = (v="primary",extra={})=>{
 };
 const ACT_BTN={green:"green",red:"danger",sky:"outline-green",purple:"purple",emerald:"forest",teal:"teal",indigo:"indigo",amber:"amber"};
 
-// ── Logic constants ────────────────────────────────────────────
 const RL={director:"Director",jefe_obra:"Jefe de Obra",arquitecto:"Arquitecto",compras:"Compras",admin:"Administración"};
 const RO=["director","jefe_obra","arquitecto","compras","admin"];
 const TL={compra_chica:"Compra Chica",compra_grande:"Compra Grande",licitacion:"Licitación",acopio:"Acopio"};
@@ -66,7 +73,6 @@ const minDel=()=>addBD(new Date(),2).toISOString().slice(0,10);
 function getRef(cod,tipo,pedidos,obraId){const fecha=new Date().toISOString().slice(0,10).replace(/-/g,"");const n=pedidos.filter(p=>p.obraId===obraId&&p.tipo===tipo).length+1;return `#${cod}_${fecha}_${TC[tipo]}_${n}`;}
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 
-// ── State machine ──────────────────────────────────────────────
 function getActions(pedido,role){
   const{tipo,estado}=pedido;const meta=pedido.metadata||{};
   const d=role==="director",isCo=role==="compras",isAd=role==="admin",isOb=role==="jefe_obra",isAr=role==="arquitecto";
@@ -128,17 +134,14 @@ function resolveAction(action,pedido,form){
   return{newEstado,newMeta};
 }
 
-// ── State defaults ─────────────────────────────────────────────
-const emptyNew={tipo:"",titulo:"",obraId:"",descripcion:"",fechaEntrega:"",urgencia:"",docLista:false,proveedores:[],provNuevo:""};
+const emptyNew={tipo:"",titulo:"",obraId:"",descripcion:"",fechaEntrega:"",urgencia:"",docLista:false,proveedores:[],provNuevo:"",archivosNuevo:[]};
 const emptyObra={nombre:"",codigo:"",direccion:""};
 const emptyUser={name:"",username:"",password:"",role:"jefe_obra",activo:true};
 
-// Logo con la "u" estilizada (portada)
 function SueloLogo({size=56, color="#fff"}) {
   return (
     <div style={{display:"inline-flex",alignItems:"flex-end",userSelect:"none",lineHeight:1}}>
       <span style={{fontFamily:"'Inter',system-ui,sans-serif",fontWeight:900,fontSize:size,color,letterSpacing:-size*0.03,lineHeight:1}}>S</span>
-      {/* "u" como dos barras verticales — estilo del logo */}
       <svg viewBox="0 0 58 72" style={{width:size*0.58,height:size*0.76,marginBottom:size*0.05}} fill={color}>
         <rect x="1"  y="0" width="17" height="58" rx="2"/>
         <rect x="40" y="0" width="17" height="58" rx="2"/>
@@ -149,7 +152,6 @@ function SueloLogo({size=56, color="#fff"}) {
   );
 }
 
-// ── App ────────────────────────────────────────────────────────
 export default function App(){
   const[users,setUsers]=useState([]);
   const[user,setUser]=useState(null);
@@ -222,14 +224,27 @@ export default function App(){
   async function savePedido(){
     setNewErr("");
     if(!newForm.tipo||!newForm.titulo.trim()||!newForm.obraId){setNewErr("Tipo, título y obra son obligatorios");return;}
+    const hasFiles=(newForm.archivosNuevo||[]).length>0;
+    if(!hasFiles&&!newForm.descripcion.trim()){setNewErr("Agregá una descripción o al menos un archivo");return;}
     if(newForm.tipo==="compra_chica"&&!newForm.fechaEntrega){setNewErr("La fecha de entrega es obligatoria");return;}
     if(newForm.tipo==="compra_chica"&&newForm.fechaEntrega<minDel()){setNewErr("Mínimo 48 hs hábiles desde hoy");return;}
     if(["compra_grande","licitacion","acopio"].includes(newForm.tipo)&&!newForm.urgencia){setNewErr("El nivel de urgencia es obligatorio");return;}
-    const obra=obras.find(o=>o.id===newForm.obraId);
-    const historial=[{accion:"Pedido creado",usuario:user.name,rol:RL[user.role],ts:Date.now(),comentario:newForm.descripcion.trim()}];
-    const initMeta=newForm.proveedores?.length?{proveedores_cotizacion:newForm.proveedores.map(n=>({id:uid(),nombre:n,estado:"enviado_a_cotizar",ts:Date.now()}))}:{};
-    const dbP={id:uid().toUpperCase(),referencia:getRef(obra.codigo,newForm.tipo,pedidos,newForm.obraId),tipo:newForm.tipo,titulo:newForm.titulo.trim(),obra_id:newForm.obraId,obra_nombre:obra.nombre,descripcion:newForm.descripcion.trim(),estado:newForm.tipo==="licitacion"&&newForm.docLista?"doc_lista":"nuevo",fecha_entrega:newForm.tipo==="compra_chica"?newForm.fechaEntrega:null,urgencia:newForm.urgencia||null,creado_por:user.id,creado_nombre:user.name,creado_at:Date.now(),historial,metadata:initMeta};
     setSaving(true);
+    const pedidoId=uid().toUpperCase();
+    let archivosData=[];
+    try{
+      for(const file of (newForm.archivosNuevo||[])){
+        const up=await uploadFile(file,pedidoId);
+        archivosData.push(up);
+      }
+    }catch(e){setNewErr("Error al subir archivos.");setSaving(false);return;}
+    const obra=obras.find(o=>o.id===newForm.obraId);
+    const initMeta={
+      ...(newForm.proveedores?.length?{proveedores_cotizacion:newForm.proveedores.map(n=>({id:uid(),nombre:n,estado:"enviado_a_cotizar",ts:Date.now()}))}:{}),
+      ...(archivosData.length?{archivos:archivosData}:{}),
+    };
+    const historial=[{accion:"Pedido creado",usuario:user.name,rol:RL[user.role],ts:Date.now(),comentario:newForm.descripcion.trim()||(hasFiles?"(ver archivos adjuntos)":"")}];
+    const dbP={id:pedidoId,referencia:getRef(obra.codigo,newForm.tipo,pedidos,newForm.obraId),tipo:newForm.tipo,titulo:newForm.titulo.trim(),obra_id:newForm.obraId,obra_nombre:obra.nombre,descripcion:newForm.descripcion.trim(),estado:newForm.tipo==="licitacion"&&newForm.docLista?"doc_lista":"nuevo",fecha_entrega:newForm.tipo==="compra_chica"?newForm.fechaEntrega:null,urgencia:newForm.urgencia||null,creado_por:user.id,creado_nombre:user.name,creado_at:Date.now(),historial,metadata:initMeta};
     try{await sb.post("pedidos",dbP);setPedidos(prev=>[mapP(dbP),...prev]);setNewForm(emptyNew);nav("dashboard");}
     catch(e){setNewErr("Error al guardar.");}
     setSaving(false);
@@ -269,14 +284,13 @@ export default function App(){
     </div>
   );
 
-  // ── LOGIN ──────────────────────────────────────────────────
   if(!user)return(
     <div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",padding:24,fontFamily:"Inter, system-ui, sans-serif"}}>
       <div style={{width:"100%",maxWidth:400}}>
-      <div style={{background:"#0F0D0B",padding:"44px 40px 36px",textAlign:"center"}}>
-  <SueloLogo size={58} color="#fff"/>
-  <div style={{fontSize:9,letterSpacing:"0.22em",color:"rgba(255,255,255,0.35)",textTransform:"uppercase",fontWeight:600,marginTop:14,fontFamily:"'Inter',system-ui,sans-serif"}}>Gestión de Compras</div>
-</div>
+        <div style={{background:"#0F0D0B",padding:"44px 40px 36px",textAlign:"center"}}>
+          <SueloLogo size={58} color="#fff"/>
+          <div style={{fontSize:9,letterSpacing:"0.22em",color:"rgba(255,255,255,0.35)",textTransform:"uppercase",fontWeight:600,marginTop:14,fontFamily:"'Inter',system-ui,sans-serif"}}>Gestión de Compras</div>
+        </div>
         <div style={{background:CB,border:`1px solid ${BD}`,borderTop:"none",padding:"32px 28px"}}>
           <Fld label="Usuario">
             <input style={css.input} value={loginF.username} placeholder="nombre.apellido" onChange={e=>setLoginF(f=>({...f,username:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&login()}/>
@@ -303,7 +317,6 @@ export default function App(){
     </div>
   );
 
-  // ── MAIN APP ───────────────────────────────────────────────
   const canCreate=CREATE_PERMS[user.role]||[];
   const isDir=user.role==="director";
   const myPending=pedidos.filter(p=>isPending(p,user.role));
@@ -318,7 +331,6 @@ export default function App(){
 
   return(
     <div style={{minHeight:"100vh",background:BG,fontFamily:"Inter, system-ui, sans-serif"}}>
-      {/* ── Header ── */}
       <header style={{background:G,padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between",height:52}}>
         <div style={{display:"flex",alignItems:"center",gap:14}}>
           <span style={{fontFamily:"'Inter',system-ui,sans-serif",fontWeight:900,fontSize:19,letterSpacing:"0.05em",color:"#fff",lineHeight:1}}>SUELO<sup style={{fontSize:9,letterSpacing:0,verticalAlign:"super"}}>®</sup></span>
@@ -329,9 +341,8 @@ export default function App(){
           <div style={{...css.lbl,color:"rgba(255,255,255,0.75)",fontSize:9}}>{user.name} · {RL[user.role].toUpperCase()}</div>
           <button onClick={logout} style={{...btnS("outline"),padding:"6px 14px",fontSize:10,color:"#fff",borderColor:"rgba(255,255,255,0.35)"}}>Salir</button>
         </div>
-    </header>
+      </header>
 
-      {/* ── Nav ── */}
       <nav style={{background:CB,borderBottom:`1px solid ${BD}`,padding:"0 24px",display:"flex",gap:0,overflowX:"auto"}}>
         {tabs.map(v=>(
           <button key={v} onClick={()=>nav(v)} style={{background:"transparent",border:"none",borderBottom:view===v&&!sel?`2px solid ${TX}`:"2px solid transparent",padding:"14px 18px",fontSize:11,letterSpacing:"0.1em",textTransform:"uppercase",fontWeight:view===v&&!sel?700:500,color:view===v&&!sel?TX:TM,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",marginBottom:-1}}>
@@ -344,7 +355,6 @@ export default function App(){
 
       <main style={{padding:24,maxWidth:900,margin:"0 auto"}}>
 
-        {/* ── DASHBOARD ── */}
         {view==="dashboard"&&!sel&&(
           <div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:24}}>
@@ -363,7 +373,6 @@ export default function App(){
           </div>
         )}
 
-        {/* ── TODOS ── */}
         {view==="todos"&&!sel&&(
           <div>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,flexWrap:"wrap",gap:8}}>
@@ -375,7 +384,6 @@ export default function App(){
           </div>
         )}
 
-        {/* ── NUEVO ── */}
         {view==="nuevo"&&!sel&&(
           <div style={{maxWidth:560}}>
             <SectionLabel text="Nuevo pedido"/>
@@ -445,8 +453,24 @@ export default function App(){
                     </div>
                   </Fld>
                 )}
-                <Fld label="Observaciones">
+                <Fld label={`Observaciones${(newForm.archivosNuevo||[]).length>0?" (opcional)":"*"}`}>
                   <textarea style={{...css.ta,height:72}} placeholder="Detalles, referencia al servidor interno..." value={newForm.descripcion} onChange={e=>setNewForm(f=>({...f,descripcion:e.target.value}))}/>
+                </Fld>
+                <Fld label="Archivos adjuntos (fotos o PDF)">
+                  <div style={{border:`1px solid ${BD}`}}>
+                    {(newForm.archivosNuevo||[]).map((f,i)=>(
+                      <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderBottom:`1px solid ${BD}`}}>
+                        <span style={{fontSize:13}}>{f.type.startsWith("image/")?"🖼":"📄"}</span>
+                        <span style={{fontSize:12,flex:1,color:TX,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.name}</span>
+                        <button type="button" onClick={()=>setNewForm(f=>({...f,archivosNuevo:f.archivosNuevo.filter((_,j)=>j!==i)}))} style={{background:"none",border:"none",cursor:"pointer",color:TM,fontSize:12}}>✕</button>
+                      </div>
+                    ))}
+                    <label style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",cursor:"pointer"}}>
+                      <input type="file" accept="image/*,application/pdf" multiple style={{display:"none"}} onChange={e=>{const files=Array.from(e.target.files);setNewForm(f=>({...f,archivosNuevo:[...(f.archivosNuevo||[]),...files]}));e.target.value="";}}/>
+                      <span style={{...btnS("outline"),padding:"6px 12px",fontSize:10,pointerEvents:"none"}}>+ Adjuntar foto o PDF</span>
+                      <span style={{fontSize:11,color:TM}}>Desde el celular o computadora</span>
+                    </label>
+                  </div>
                 </Fld>
                 {newForm.obraId&&newForm.tipo&&(
                   <div style={{borderLeft:`3px solid ${G}`,paddingLeft:12}}>
@@ -464,7 +488,6 @@ export default function App(){
           </div>
         )}
 
-        {/* ── OBRAS ── */}
         {view==="obras"&&!sel&&isDir&&(
           <div style={{maxWidth:560}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
@@ -496,7 +519,6 @@ export default function App(){
           </div>
         )}
 
-        {/* ── USUARIOS ── */}
         {view==="usuarios"&&!sel&&isDir&&(
           <div style={{maxWidth:700}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
@@ -568,7 +590,6 @@ export default function App(){
           </div>
         )}
 
-        {/* ── DETALLE ── */}
         {view==="detalle"&&sel&&(
           <DetailView pedido={sel} user={user} onSimpleAction={doSimpleAction}
             onFormAction={action=>setActionModal({action,pedido:sel})}
@@ -578,10 +599,8 @@ export default function App(){
         )}
       </main>
 
-      {/* ── ACTION MODAL ── */}
       {actionModal&&<ActionModal modal={actionModal} onSubmit={form=>doFormAction(actionModal.pedido,actionModal.action,form)} onClose={()=>setActionModal(null)}/>}
 
-      {/* ── DELETE CONFIRM ── */}
       {delConfirm&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:24}}>
           <div style={{background:CB,border:`1px solid ${BD}`,padding:28,width:"100%",maxWidth:380,textAlign:"center"}}>
@@ -599,7 +618,6 @@ export default function App(){
   );
 }
 
-// ── Detail View ────────────────────────────────────────────────
 function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onUpdateMeta}){
   const[comment,setComment]=useState("");
   const[fechaRecepcion,setFechaRecepcion]=useState("");
@@ -608,6 +626,9 @@ function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onU
   const[recibidoDesc,setRecibidoDesc]=useState("");
   const[pendienteDesc,setPendienteDesc]=useState("");
   const[provNombre,setProvNombre]=useState("");
+  const[recepArchivos,setRecepArchivos]=useState([]);
+  const[savingRecep,setSavingRecep]=useState(false);
+
   const actions=getActions(pedido,user.role);
   const meta=pedido.metadata||{};
   const proveedores=meta.proveedores_cotizacion||[];
@@ -623,20 +644,43 @@ function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onU
   function updateProvEstado(id,estado){onUpdateMeta({...meta,proveedores_cotizacion:proveedores.map(p=>p.id===id?{...p,estado}:p)});}
   function removeProveedor(id){onUpdateMeta({...meta,proveedores_cotizacion:proveedores.filter(p=>p.id!==id)});}
 
-  function handleDelivery(action){
+  async function handleDelivery(action){
     if(!fechaRecepcion){alert("Ingresá la fecha de recepción");return;}
-    if(recepTipo==="parcial"){
-      if(!recibidoDesc.trim()){alert("Detallá qué se recibió");return;}
-      const nueva={id:uid(),fecha:fechaRecepcion,nro_remito:nroRemito,recibido:recibidoDesc,pendiente:pendienteDesc,ts:Date.now(),usuario:user.name};
-      onSimpleAction(pedido,{label:"Recepción Parcial",newEstado:pedido.estado},`Recibido: ${recibidoDesc}${pendienteDesc?`. Pend: ${pendienteDesc}`:""}`,{recepciones_parciales:[...(meta.recepciones_parciales||[]),nueva]});
-    }else{
-      onSimpleAction(pedido,action,comment,{fecha_recepcion:fechaRecepcion,nro_remito:nroRemito});
-    }
-    setFechaRecepcion("");setNroRemito("");setRecibidoDesc("");setPendienteDesc("");setRecepTipo("total");setComment("");
+    const hasFiles=recepArchivos.length>0;
+    setSavingRecep(true);
+    try{
+      let archivosUrls=[];
+      for(const file of recepArchivos){
+        const up=await uploadFile(file,pedido.id);
+        archivosUrls.push(up);
+      }
+      if(recepTipo==="parcial"){
+        if(!hasFiles&&!recibidoDesc.trim()){alert("Adjuntá archivos o detallá qué se recibió");setSavingRecep(false);return;}
+        const nueva={id:uid(),fecha:fechaRecepcion,nro_remito:nroRemito,recibido:recibidoDesc||(hasFiles?"(ver archivos adjuntos)":""),pendiente:pendienteDesc,ts:Date.now(),usuario:user.name,...(archivosUrls.length?{archivos:archivosUrls}:{})};
+        await onSimpleAction(pedido,{label:"Recepción Parcial",newEstado:pedido.estado},`Recibido: ${recibidoDesc||"(ver archivos)"}${pendienteDesc?`. Pend: ${pendienteDesc}`:""}`,{recepciones_parciales:[...(meta.recepciones_parciales||[]),nueva]});
+      }else{
+        await onSimpleAction(pedido,action,comment,{fecha_recepcion:fechaRecepcion,nro_remito:nroRemito,...(archivosUrls.length?{archivos_recepcion:archivosUrls}:{})});
+      }
+      setFechaRecepcion("");setNroRemito("");setRecibidoDesc("");setPendienteDesc("");setRecepTipo("total");setComment("");setRecepArchivos([]);
+    }catch(e){alert("Error al subir archivos.");}
+    setSavingRecep(false);
   }
 
   const est=ESTADOS[pedido.estado]||{label:pedido.estado.toUpperCase(),color:TM};
   const tip=TIPOS[pedido.tipo]||{label:pedido.tipo,color:TM};
+
+  const FileList=({archivos,compact=false})=>archivos?.length>0?(
+    <div style={compact?{marginTop:6}:{border:`1px solid ${BD}`,marginTop:8}}>
+      {archivos.map((a,i)=>(
+        <a key={i} href={a.url} target="_blank" rel="noopener noreferrer"
+          style={{display:"flex",alignItems:"center",gap:8,padding:compact?"3px 0":"8px 14px",borderBottom:(!compact&&i<archivos.length-1)?`1px solid ${BD}`:"none",textDecoration:"none"}}>
+          <span style={{fontSize:13}}>{a.tipo?.startsWith("image/")?"🖼":"📄"}</span>
+          <span style={{fontSize:12,color:G,flex:1}}>{a.nombre}</span>
+          <span style={{fontSize:10,color:TM}}>↗</span>
+        </a>
+      ))}
+    </div>
+  ):null;
 
   return(
     <div style={{maxWidth:680}}>
@@ -646,7 +690,6 @@ function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onU
       </div>
 
       <div style={{...css.card,padding:"24px 28px"}}>
-        {/* Header del pedido */}
         <div style={{borderBottom:`1px solid ${BD}`,paddingBottom:16,marginBottom:20}}>
           <div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:10,marginBottom:10}}>
             <span style={{fontFamily:"monospace",fontWeight:700,fontSize:13,color:TX}}>{pedido.referencia}</span>
@@ -661,13 +704,19 @@ function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onU
         </div>
 
         {pedido.descripcion&&(
-          <div style={{borderLeft:`3px solid ${BD}`,paddingLeft:12,marginBottom:20}}>
+          <div style={{borderLeft:`3px solid ${BD}`,paddingLeft:12,marginBottom:16}}>
             <div style={{...css.lbl,color:TM,fontSize:9,marginBottom:4}}>Observaciones</div>
             <div style={{fontSize:13,color:TX}}>{pedido.descripcion}</div>
           </div>
         )}
 
-        {/* Toggle En Proceso */}
+        {meta.archivos?.length>0&&(
+          <div style={{border:`1px solid ${BD}`,marginBottom:16}}>
+            <div style={{...css.lbl,color:TM,fontSize:9,padding:"8px 14px",borderBottom:`1px solid ${BD}`}}>Archivos adjuntos ({meta.archivos.length})</div>
+            <FileList archivos={meta.archivos}/>
+          </div>
+        )}
+
         {(user.role==="compras"||user.role==="director")&&isActive&&(
           <div style={{border:`1px solid #C47820`,padding:"12px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12}}>
             <button type="button" onClick={toggleEnProceso}
@@ -678,22 +727,17 @@ function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onU
           </div>
         )}
 
-        {/* Datos de la compra */}
         {meta.proveedor&&(
           <div style={{border:`1px solid ${BD}`,padding:"16px",marginBottom:16}}>
             <div style={{...css.lbl,color:G,fontSize:9,marginBottom:10}}>Datos de la compra</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 16px"}}>
               {[[meta.proveedor,"Proveedor"],[meta.contacto_nombre,"Contacto"],[meta.contacto_tel,"Teléfono"],[meta.contacto_mail,"Mail"],[meta.monto?fmtMoney(meta.monto):null,"Monto"],[meta.tipo_pago?({contra_entrega:"Contra entrega",anticipado:"Anticipado",pago_parcial:"Pago parcial"}[meta.tipo_pago]):null,"Forma de pago"],[meta.info_pago,"Info pago"],[meta.info_entrega,"Info entrega"],[meta.condiciones_pago,"Cond. pago"],[meta.condiciones_entrega,"Cond. entrega"],[meta.firma_contrato!==undefined?meta.firma_contrato?"Sí":"No":null,"Firma contrato"],[meta.firma_contrato&&meta.anexos?meta.anexos:null,"Anexos"]].filter(([v])=>v).map(([v,l])=>(
-                <div key={l}>
-                  <div style={{...css.lbl,color:TM,fontSize:8}}>{l}</div>
-                  <div style={{fontSize:12,color:TX,marginTop:1}}>{v}</div>
-                </div>
+                <div key={l}><div style={{...css.lbl,color:TM,fontSize:8}}>{l}</div><div style={{fontSize:12,color:TX,marginTop:1}}>{v}</div></div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Recepciones parciales */}
         {recepParciales.length>0&&(
           <div style={{border:`1px solid #C47820`,marginBottom:16}}>
             <div style={{...css.lbl,color:"#C47820",fontSize:9,padding:"8px 14px",borderBottom:`1px solid #C47820`}}>RECEPCIONES PARCIALES ({recepParciales.length})</div>
@@ -702,20 +746,20 @@ function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onU
                 <div style={{...css.lbl,color:TM,fontSize:9}}>{r.fecha}{r.nro_remito?` · Remito: ${r.nro_remito}`:""} · {r.usuario}</div>
                 <div style={{fontSize:12,color:"#2D7A3A",marginTop:3}}><b>Recibido:</b> {r.recibido}</div>
                 {r.pendiente&&<div style={{fontSize:12,color:"#C47820",marginTop:2}}><b>Pendiente:</b> {r.pendiente}</div>}
+                {r.archivos?.length>0&&<FileList archivos={r.archivos} compact/>}
               </div>
             ))}
           </div>
         )}
 
-        {/* Recepción total */}
         {meta.fecha_recepcion&&(
           <div style={{borderLeft:`3px solid #2D7A3A`,paddingLeft:12,marginBottom:16}}>
             <div style={{...css.lbl,color:"#2D7A3A",fontSize:9}}>✓ RECEPCIÓN TOTAL</div>
             <div style={{fontSize:12,color:TX,marginTop:2}}>{meta.fecha_recepcion}{meta.nro_remito?` · Remito: ${meta.nro_remito}`:""}</div>
+            {meta.archivos_recepcion?.length>0&&<FileList archivos={meta.archivos_recepcion} compact/>}
           </div>
         )}
 
-        {/* Proveedores */}
         {canManageProvs&&(
           <div style={{border:`1px solid ${BD}`,marginBottom:16}}>
             <div style={{...css.lbl,color:TM,fontSize:9,padding:"8px 14px",borderBottom:`1px solid ${BD}`}}>Proveedores consultados</div>
@@ -743,7 +787,6 @@ function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onU
           </div>
         )}
 
-        {/* Acciones */}
         {actions.length>0&&(
           <div style={{borderTop:`1px solid ${BD}`,paddingTop:20,marginTop:8}}>
             <div style={{...css.lbl,color:TX,fontSize:10,marginBottom:14}}>Tu acción requerida</div>
@@ -758,14 +801,35 @@ function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onU
                     </button>
                   ))}
                 </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:recepTipo==="parcial"?10:0}}>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
                   <Fld label="Fecha *"><input type="date" style={css.input} value={fechaRecepcion} onChange={e=>setFechaRecepcion(e.target.value)}/></Fld>
                   <Fld label="N° Remito"><input style={css.input} placeholder="0001-000123" value={nroRemito} onChange={e=>setNroRemito(e.target.value)}/></Fld>
                 </div>
+                <div style={{marginBottom:recepTipo==="parcial"?12:0}}>
+                  <Fld label="Fotos o archivos (opcional si cargás descripción)">
+                    <div style={{border:`1px solid ${BD}`}}>
+                      {recepArchivos.map((f,i)=>(
+                        <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderBottom:`1px solid ${BD}`}}>
+                          <span style={{fontSize:13}}>{f.type.startsWith("image/")?"🖼":"📄"}</span>
+                          <span style={{fontSize:12,flex:1,color:TX,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.name}</span>
+                          <button type="button" onClick={()=>setRecepArchivos(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:TM,fontSize:12}}>✕</button>
+                        </div>
+                      ))}
+                      <label style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",cursor:"pointer"}}>
+                        <input type="file" accept="image/*,application/pdf" multiple style={{display:"none"}} onChange={e=>{setRecepArchivos(prev=>[...prev,...Array.from(e.target.files)]);e.target.value="";}}/>
+                        <span style={{...btnS("outline"),padding:"6px 12px",fontSize:10,pointerEvents:"none"}}>+ Foto o archivo</span>
+                      </label>
+                    </div>
+                  </Fld>
+                </div>
                 {recepTipo==="parcial"&&(
                   <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                    <Fld label="¿Qué se recibió? *"><textarea style={{...css.ta,height:56}} placeholder="Detallá items o cantidades recibidas..." value={recibidoDesc} onChange={e=>setRecibidoDesc(e.target.value)}/></Fld>
-                    <Fld label="¿Qué queda pendiente?"><textarea style={{...css.ta,height:56}} placeholder="Detallá lo que falta..." value={pendienteDesc} onChange={e=>setPendienteDesc(e.target.value)}/></Fld>
+                    <Fld label={`¿Qué se recibió?${recepArchivos.length>0?" (opcional)":"*"}`}>
+                      <textarea style={{...css.ta,height:56}} placeholder="Detallá items o cantidades recibidas..." value={recibidoDesc} onChange={e=>setRecibidoDesc(e.target.value)}/>
+                    </Fld>
+                    <Fld label="¿Qué queda pendiente?">
+                      <textarea style={{...css.ta,height:56}} placeholder="Detallá lo que falta..." value={pendienteDesc} onChange={e=>setPendienteDesc(e.target.value)}/>
+                    </Fld>
                   </div>
                 )}
               </div>
@@ -775,19 +839,20 @@ function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onU
             )}
             <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
               {actions.map(a=>(
-                <button key={a.label} onClick={()=>{
+                <button key={a.label} disabled={savingRecep} onClick={()=>{
                   if(a.formType){onFormAction(a);return;}
                   if(isDelivery(a)){handleDelivery(a);return;}
                   onSimpleAction(pedido,a,comment).then(()=>setComment(""));
-                }} style={btnS(ACT_BTN[a.color]||"primary")}>
-                  {isDelivery(a)&&hasDelivery?(recepTipo==="parcial"?"Registrar Parcial":a.label):a.label}
+                }} style={{...btnS(ACT_BTN[a.color]||"primary"),opacity:savingRecep?0.5:1}}>
+                  {savingRecep&&isDelivery(a)?"Subiendo..."
+                    :isDelivery(a)&&hasDelivery?(recepTipo==="parcial"?"Registrar Parcial":a.label)
+                    :a.label}
                 </button>
               ))}
             </div>
           </div>
         )}
 
-        {/* Historial */}
         <div style={{borderTop:`1px solid ${BD}`,paddingTop:20,marginTop:20}}>
           <div style={{...css.lbl,color:TM,fontSize:9,marginBottom:14}}>Historial</div>
           <div style={{display:"flex",flexDirection:"column",gap:0}}>
@@ -808,7 +873,6 @@ function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onU
   );
 }
 
-// ── Action Modal ───────────────────────────────────────────────
 function ActionModal({modal,onSubmit,onClose}){
   const{action,pedido}=modal;
   const ft=action.formType;
@@ -837,7 +901,6 @@ function ActionModal({modal,onSubmit,onClose}){
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:TM,lineHeight:1}}>×</button>
         </div>
-
         <div style={{maxHeight:"60vh",overflowY:"auto",display:"flex",flexDirection:"column",gap:14,paddingRight:4}}>
           {ft==="approve_cc_dir"&&(
             <div style={{border:`1px solid ${G}`,padding:"14px 16px"}}>
@@ -851,7 +914,6 @@ function ActionModal({modal,onSubmit,onClose}){
               <div style={{...css.lbl,color:"#C47820",fontSize:9,marginTop:10}}>⚠ Monto supera $4.000.000 — Requiere aprobación de Dirección</div>
             </div>
           )}
-
           {ft==="approve_cc"&&<>
             <Fld label="Proveedor elegido *"><input style={css.input} value={f.proveedor} onChange={set("proveedor")}/></Fld>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
@@ -875,7 +937,6 @@ function ActionModal({modal,onSubmit,onClose}){
               </div>
             </Fld>
           </>}
-
           {ft==="approve_dir_grande"&&<>
             <Fld label="Proveedor *"><input style={css.input} value={f.proveedor} onChange={set("proveedor")}/></Fld>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
@@ -895,7 +956,6 @@ function ActionModal({modal,onSubmit,onClose}){
               </div>
             </Fld>
           </>}
-
           {(ft==="approve_dir_licitacion"||ft==="approve_dir_acopio")&&<>
             <Fld label="Proveedor *"><input style={css.input} value={f.proveedor} onChange={set("proveedor")}/></Fld>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
@@ -912,15 +972,13 @@ function ActionModal({modal,onSubmit,onClose}){
               </button>
               <span style={{...css.lbl,color:f.firma_contrato?G:TM,fontSize:10}}>¿Requiere firma de contrato?</span>
             </div>
-            {f.firma_contrato&&<Fld label="Anexos a firmar *"><textarea style={{...css.ta,height:72}} placeholder="Ej: Anexo A — Especificaciones técnicas, Anexo B — Planos..." value={f.anexos} onChange={set("anexos")}/></Fld>}
+            {f.firma_contrato&&<Fld label="Anexos a firmar *"><textarea style={{...css.ta,height:72}} placeholder="Ej: Anexo A — Especificaciones técnicas..." value={f.anexos} onChange={set("anexos")}/></Fld>}
           </>}
-
           <Fld label="Comentario (opcional)">
             <textarea style={{...css.ta,height:56}} value={f.comment} onChange={set("comment")}/>
           </Fld>
           {err&&<div style={{color:"#CC3333",fontSize:12,letterSpacing:"0.04em"}}>{err}</div>}
         </div>
-
         <div style={{display:"flex",gap:8,paddingTop:16,borderTop:`1px solid ${BD}`,marginTop:16}}>
           <button onClick={submit} style={btnS(ACT_BTN[action.color]||"primary")}>Confirmar</button>
           <button onClick={onClose} style={btnS("ghost")}>Cancelar</button>
@@ -930,7 +988,6 @@ function ActionModal({modal,onSubmit,onClose}){
   );
 }
 
-// ── Small components ───────────────────────────────────────────
 function Fld({label,children}){
   return(
     <div>
@@ -966,6 +1023,7 @@ function PCard({p,onClick}){
           <span style={{...css.lbl,color:est.color,border:`1px solid ${est.color}`,padding:"2px 6px",fontSize:8}}>{est.label}</span>
           {p.urgencia&&<span style={{...css.lbl,color:URG[p.urgencia].color,fontSize:8}}>{URG[p.urgencia].label}</span>}
           {p.metadata?.en_proceso&&<span style={{...css.lbl,color:"#C47820",fontSize:8}}>🔄 EN PROCESO</span>}
+          {p.metadata?.archivos?.length>0&&<span style={{...css.lbl,color:TM,fontSize:8}}>📎 {p.metadata.archivos.length}</span>}
         </div>
         <div style={{fontWeight:700,fontSize:14,color:TX,marginBottom:2}}>{p.titulo}</div>
         <div style={{fontSize:11,color:TM}}>🏢 {p.obraNombre}</div>
