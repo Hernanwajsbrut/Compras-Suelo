@@ -133,6 +133,22 @@ const emptyNew={tipo:"",titulo:"",obraId:"",descripcion:"",fechaEntrega:"",urgen
 const emptyObra={nombre:"",codigo:"",direccion:""};
 const emptyUser={name:"",username:"",password:"",role:"jefe_obra",activo:true};
 
+// Logo con la "u" estilizada (portada)
+function SueloLogo({size=56, color="#fff"}) {
+  return (
+    <div style={{display:"inline-flex",alignItems:"flex-end",userSelect:"none",lineHeight:1}}>
+      <span style={{fontFamily:"'Inter',system-ui,sans-serif",fontWeight:900,fontSize:size,color,letterSpacing:-size*0.03,lineHeight:1}}>S</span>
+      {/* "u" como dos barras verticales — estilo del logo */}
+      <svg viewBox="0 0 58 72" style={{width:size*0.58,height:size*0.76,marginBottom:size*0.05}} fill={color}>
+        <rect x="1"  y="0" width="17" height="58" rx="2"/>
+        <rect x="40" y="0" width="17" height="58" rx="2"/>
+        <rect x="1"  y="47" width="56" height="13" rx="2"/>
+      </svg>
+      <span style={{fontFamily:"'Inter',system-ui,sans-serif",fontWeight:900,fontSize:size,color,letterSpacing:-size*0.03,lineHeight:1}}>elo</span>
+    </div>
+  );
+}
+
 // ── App ────────────────────────────────────────────────────────
 export default function App(){
   const[users,setUsers]=useState([]);
@@ -257,11 +273,11 @@ export default function App(){
   if(!user)return(
     <div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",padding:24,fontFamily:"Inter, system-ui, sans-serif"}}>
       <div style={{width:"100%",maxWidth:400}}>
-        <div style={{textAlign:"center",marginBottom:40}}>
-          <div style={{fontWeight:900,fontSize:36,letterSpacing:"-2px",color:TX,lineHeight:1}}>SUELO™</div>
-          <div style={{...css.lbl,color:G,fontSize:9,marginTop:8}}>Gestión de Compras</div>
-        </div>
-        <div style={{background:CB,border:`1px solid ${BD}`,padding:"32px 28px"}}>
+      <div style={{background:"#0F0D0B",padding:"44px 40px 36px",textAlign:"center"}}>
+  <SueloLogo size={58} color="#fff"/>
+  <div style={{fontSize:9,letterSpacing:"0.22em",color:"rgba(255,255,255,0.35)",textTransform:"uppercase",fontWeight:600,marginTop:14,fontFamily:"'Inter',system-ui,sans-serif"}}>Gestión de Compras</div>
+</div>
+        <div style={{background:CB,border:`1px solid ${BD}`,borderTop:"none",padding:"32px 28px"}}>
           <Fld label="Usuario">
             <input style={css.input} value={loginF.username} placeholder="nombre.apellido" onChange={e=>setLoginF(f=>({...f,username:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&login()}/>
           </Fld>
@@ -303,17 +319,17 @@ export default function App(){
   return(
     <div style={{minHeight:"100vh",background:BG,fontFamily:"Inter, system-ui, sans-serif"}}>
       {/* ── Header ── */}
-      <header style={{background:CB,borderBottom:`1px solid ${BD}`,padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between",height:52}}>
-        <div style={{display:"flex",alignItems:"center",gap:16}}>
-          <div style={{fontWeight:900,fontSize:18,letterSpacing:"-0.5px",color:TX}}>SUELO™</div>
-          <div style={{width:1,height:16,background:BD}}/>
-          <div style={{...css.lbl,color:TM,fontSize:9}}>Gestión de Compras</div>
+      <header style={{background:G,padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between",height:52}}>
+        <div style={{display:"flex",alignItems:"center",gap:14}}>
+          <span style={{fontFamily:"'Inter',system-ui,sans-serif",fontWeight:900,fontSize:19,letterSpacing:"0.05em",color:"#fff",lineHeight:1}}>SUELO<sup style={{fontSize:9,letterSpacing:0,verticalAlign:"super"}}>®</sup></span>
+          <div style={{width:1,height:16,background:"rgba(255,255,255,0.2)"}}/>
+          <div style={{...css.lbl,color:"rgba(255,255,255,0.55)",fontSize:9}}>Gestión de Compras</div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:16}}>
-          <div style={{...css.lbl,color:G,fontSize:9}}>{user.name} · {RL[user.role].toUpperCase()}</div>
-          <button onClick={logout} style={{...btnS("outline"),padding:"6px 14px",fontSize:10}}>Salir</button>
+          <div style={{...css.lbl,color:"rgba(255,255,255,0.75)",fontSize:9}}>{user.name} · {RL[user.role].toUpperCase()}</div>
+          <button onClick={logout} style={{...btnS("outline"),padding:"6px 14px",fontSize:10,color:"#fff",borderColor:"rgba(255,255,255,0.35)"}}>Salir</button>
         </div>
-      </header>
+    </header>
 
       {/* ── Nav ── */}
       <nav style={{background:CB,borderBottom:`1px solid ${BD}`,padding:"0 24px",display:"flex",gap:0,overflowX:"auto"}}>
@@ -560,7 +576,6 @@ export default function App(){
             onBack={()=>{setSel(null);setView("dashboard");}}
             onUpdateMeta={newMeta=>updateMeta(sel,newMeta)}/>
         )}
-
       </main>
 
       {/* ── ACTION MODAL ── */}
