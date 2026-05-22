@@ -492,7 +492,7 @@ export default function App(){
 </Fld>
             </div>
           </div>
-        )}
+        )
 
         {/* ── OBRAS ── */}
         {view==="obras"&&!sel&&isDir&&(
