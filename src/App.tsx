@@ -10,17 +10,6 @@ const sb = {
   patch: async(t,id,d) => { const r=await fetch(`${SB_URL}/rest/v1/${t}?id=eq.${encodeURIComponent(id)}`,{method:"PATCH",headers:H,body:JSON.stringify(d)}); if(!r.ok)throw new Error(await r.text()); return r.json(); },
   del:   async(t,id)   => { const r=await fetch(`${SB_URL}/rest/v1/${t}?id=eq.${encodeURIComponent(id)}`,{method:"DELETE",headers:H}); if(!r.ok)throw new Error(await r.text()); },
 };
-async function uploadFile(file, pedidoId){
-  const ext=file.name.split('.').pop().toLowerCase();
-  const path=`pedidos/${pedidoId}/${Date.now()}_${Math.random().toString(36).slice(2,5)}.${ext}`;
-  const r=await fetch(`${SB_URL}/storage/v1/object/archivos/${path}`,{
-    method:"POST",
-    headers:{"apikey":SB_KEY,"Authorization":`Bearer ${SB_KEY}`,"Content-Type":file.type},
-    body:file,
-  });
-  if(!r.ok)throw new Error(await r.text());
-  return {url:`${SB_URL}/storage/v1/object/public/archivos/${path}`,nombre:file.name,tipo:file.type,ts:Date.now()};
-}
 const mapP = p=>({...p,obraId:p.obra_id,obraNombre:p.obra_nombre,fechaEntrega:p.fecha_entrega,historial:p.historial||[],metadata:p.metadata||{}});
 
 // ── Design tokens ──────────────────────────────────────────────
@@ -140,25 +129,9 @@ function resolveAction(action,pedido,form){
 }
 
 // ── State defaults ─────────────────────────────────────────────
-const emptyNew={tipo:"",titulo:"",obraId:"",descripcion:"",fechaEntrega:"",urgencia:"",docLista:false,proveedores:[],provNuevo:"",archivosNuevo:[]};
+const emptyNew={tipo:"",titulo:"",obraId:"",descripcion:"",fechaEntrega:"",urgencia:"",docLista:false,proveedores:[],provNuevo:""};
 const emptyObra={nombre:"",codigo:"",direccion:""};
 const emptyUser={name:"",username:"",password:"",role:"jefe_obra",activo:true};
-
-// Logo con la "u" estilizada (portada)
-function SueloLogo({size=56, color="#fff"}) {
-  return (
-    <div style={{display:"inline-flex",alignItems:"flex-end",userSelect:"none",lineHeight:1}}>
-      <span style={{fontFamily:"'Inter',system-ui,sans-serif",fontWeight:900,fontSize:size,color,letterSpacing:-size*0.03,lineHeight:1}}>S</span>
-      {/* "u" como dos barras verticales — estilo del logo */}
-      <svg viewBox="0 0 58 72" style={{width:size*0.58,height:size*0.76,marginBottom:size*0.05}} fill={color}>
-        <rect x="1"  y="0" width="17" height="58" rx="2"/>
-        <rect x="40" y="0" width="17" height="58" rx="2"/>
-        <rect x="1"  y="47" width="56" height="13" rx="2"/>
-      </svg>
-      <span style={{fontFamily:"'Inter',system-ui,sans-serif",fontWeight:900,fontSize:size,color,letterSpacing:-size*0.03,lineHeight:1}}>elo</span>
-    </div>
-  );
-}
 
 // ── App ────────────────────────────────────────────────────────
 export default function App(){
@@ -233,27 +206,14 @@ export default function App(){
   async function savePedido(){
     setNewErr("");
     if(!newForm.tipo||!newForm.titulo.trim()||!newForm.obraId){setNewErr("Tipo, título y obra son obligatorios");return;}
-    const hasFiles=(newForm.archivosNuevo||[]).length>0;
-    if(!hasFiles&&!newForm.descripcion.trim()){setNewErr("Agregá una descripción o al menos un archivo");return;}
     if(newForm.tipo==="compra_chica"&&!newForm.fechaEntrega){setNewErr("La fecha de entrega es obligatoria");return;}
     if(newForm.tipo==="compra_chica"&&newForm.fechaEntrega<minDel()){setNewErr("Mínimo 48 hs hábiles desde hoy");return;}
     if(["compra_grande","licitacion","acopio"].includes(newForm.tipo)&&!newForm.urgencia){setNewErr("El nivel de urgencia es obligatorio");return;}
-    setSaving(true);
-    const pedidoId=uid().toUpperCase();
-    let archivosData=[];
-    try{
-      for(const file of (newForm.archivosNuevo||[])){
-        const up=await uploadFile(file,pedidoId);
-        archivosData.push(up);
-      }
-    }catch(e){setNewErr("Error al subir archivos. Intentá de nuevo.");setSaving(false);return;}
     const obra=obras.find(o=>o.id===newForm.obraId);
-    const initMeta={
-      ...(newForm.proveedores?.length?{proveedores_cotizacion:newForm.proveedores.map(n=>({id:uid(),nombre:n,estado:"enviado_a_cotizar",ts:Date.now()}))}:{}),
-      ...(archivosData.length?{archivos:archivosData}:{}),
-    };
-    const historial=[{accion:"Pedido creado",usuario:user.name,rol:RL[user.role],ts:Date.now(),comentario:newForm.descripcion.trim()||(hasFiles?"(ver archivos adjuntos)":"")}];
-    const dbP={id:pedidoId,referencia:getRef(obra.codigo,newForm.tipo,pedidos,newForm.obraId),tipo:newForm.tipo,titulo:newForm.titulo.trim(),obra_id:newForm.obraId,obra_nombre:obra.nombre,descripcion:newForm.descripcion.trim(),estado:newForm.tipo==="licitacion"&&newForm.docLista?"doc_lista":"nuevo",fecha_entrega:newForm.tipo==="compra_chica"?newForm.fechaEntrega:null,urgencia:newForm.urgencia||null,creado_por:user.id,creado_nombre:user.name,creado_at:Date.now(),historial,metadata:initMeta};
+    const historial=[{accion:"Pedido creado",usuario:user.name,rol:RL[user.role],ts:Date.now(),comentario:newForm.descripcion.trim()}];
+    const initMeta=newForm.proveedores?.length?{proveedores_cotizacion:newForm.proveedores.map(n=>({id:uid(),nombre:n,estado:"enviado_a_cotizar",ts:Date.now()}))}:{};
+    const dbP={id:uid().toUpperCase(),referencia:getRef(obra.codigo,newForm.tipo,pedidos,newForm.obraId),tipo:newForm.tipo,titulo:newForm.titulo.trim(),obra_id:newForm.obraId,obra_nombre:obra.nombre,descripcion:newForm.descripcion.trim(),estado:newForm.tipo==="licitacion"&&newForm.docLista?"doc_lista":"nuevo",fecha_entrega:newForm.tipo==="compra_chica"?newForm.fechaEntrega:null,urgencia:newForm.urgencia||null,creado_por:user.id,creado_nombre:user.name,creado_at:Date.now(),historial,metadata:initMeta};
+    setSaving(true);
     try{await sb.post("pedidos",dbP);setPedidos(prev=>[mapP(dbP),...prev]);setNewForm(emptyNew);nav("dashboard");}
     catch(e){setNewErr("Error al guardar.");}
     setSaving(false);
@@ -297,11 +257,11 @@ export default function App(){
   if(!user)return(
     <div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",padding:24,fontFamily:"Inter, system-ui, sans-serif"}}>
       <div style={{width:"100%",maxWidth:400}}>
-      <div style={{background:"#0F0D0B",padding:"44px 40px 36px",textAlign:"center"}}>
-  <SueloLogo size={58} color="#fff"/>
-  <div style={{fontSize:9,letterSpacing:"0.22em",color:"rgba(255,255,255,0.35)",textTransform:"uppercase",fontWeight:600,marginTop:14,fontFamily:"'Inter',system-ui,sans-serif"}}>Gestión de Compras</div>
-</div>
-        <div style={{background:CB,border:`1px solid ${BD}`,borderTop:"none",padding:"32px 28px"}}>
+        <div style={{textAlign:"center",marginBottom:40}}>
+          <div style={{fontWeight:900,fontSize:36,letterSpacing:"-2px",color:TX,lineHeight:1}}>SUELO™</div>
+          <div style={{...css.lbl,color:G,fontSize:9,marginTop:8}}>Gestión de Compras</div>
+        </div>
+        <div style={{background:CB,border:`1px solid ${BD}`,padding:"32px 28px"}}>
           <Fld label="Usuario">
             <input style={css.input} value={loginF.username} placeholder="nombre.apellido" onChange={e=>setLoginF(f=>({...f,username:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&login()}/>
           </Fld>
@@ -343,17 +303,17 @@ export default function App(){
   return(
     <div style={{minHeight:"100vh",background:BG,fontFamily:"Inter, system-ui, sans-serif"}}>
       {/* ── Header ── */}
-      <header style={{background:G,padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between",height:52}}>
-        <div style={{display:"flex",alignItems:"center",gap:14}}>
-          <span style={{fontFamily:"'Inter',system-ui,sans-serif",fontWeight:900,fontSize:19,letterSpacing:"0.05em",color:"#fff",lineHeight:1}}>SUELO<sup style={{fontSize:9,letterSpacing:0,verticalAlign:"super"}}>®</sup></span>
-          <div style={{width:1,height:16,background:"rgba(255,255,255,0.2)"}}/>
-          <div style={{...css.lbl,color:"rgba(255,255,255,0.55)",fontSize:9}}>Gestión de Compras</div>
+      <header style={{background:CB,borderBottom:`1px solid ${BD}`,padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between",height:52}}>
+        <div style={{display:"flex",alignItems:"center",gap:16}}>
+          <div style={{fontWeight:900,fontSize:18,letterSpacing:"-0.5px",color:TX}}>SUELO™</div>
+          <div style={{width:1,height:16,background:BD}}/>
+          <div style={{...css.lbl,color:TM,fontSize:9}}>Gestión de Compras</div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:16}}>
-          <div style={{...css.lbl,color:"rgba(255,255,255,0.75)",fontSize:9}}>{user.name} · {RL[user.role].toUpperCase()}</div>
-          <button onClick={logout} style={{...btnS("outline"),padding:"6px 14px",fontSize:10,color:"#fff",borderColor:"rgba(255,255,255,0.35)"}}>Salir</button>
+          <div style={{...css.lbl,color:G,fontSize:9}}>{user.name} · {RL[user.role].toUpperCase()}</div>
+          <button onClick={logout} style={{...btnS("outline"),padding:"6px 14px",fontSize:10}}>Salir</button>
         </div>
-    </header>
+      </header>
 
       {/* ── Nav ── */}
       <nav style={{background:CB,borderBottom:`1px solid ${BD}`,padding:"0 24px",display:"flex",gap:0,overflowX:"auto"}}>
@@ -469,30 +429,24 @@ export default function App(){
                     </div>
                   </Fld>
                 )}
-                <Fld label={`Observaciones${(newForm.archivosNuevo||[]).length>0?" (opcional)":"*"}`}>
-  <textarea style={{...css.ta,height:72}} placeholder="Detalles, referencia al servidor interno..." value={newForm.descripcion} onChange={e=>setNewForm(f=>({...f,descripcion:e.target.value}))}/>
-</Fld>
-
-<Fld label="Archivos adjuntos (fotos o PDF)">
-  <div style={{border:`1px solid ${BD}`}}>
-    {(newForm.archivosNuevo||[]).map((f,i)=>(
-      <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderBottom:`1px solid ${BD}`}}>
-        <span style={{fontSize:13}}>{f.type.startsWith("image/")?"🖼":"📄"}</span>
-        <span style={{fontSize:12,flex:1,color:TX,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.name}</span>
-        <button type="button" onClick={()=>setNewForm(f=>({...f,archivosNuevo:f.archivosNuevo.filter((_,j)=>j!==i)}))} style={{background:"none",border:"none",cursor:"pointer",color:TM,fontSize:12}}>✕</button>
-      </div>
-    ))}
-    <label style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",cursor:"pointer"}}>
-      <input type="file" accept="image/*,application/pdf" multiple style={{display:"none"}}
-        onChange={e=>{const files=Array.from(e.target.files);setNewForm(f=>({...f,archivosNuevo:[...(f.archivosNuevo||[]),...files]}));e.target.value="";}}/>
-      <span style={{...btnS("outline"),padding:"6px 12px",fontSize:10,pointerEvents:"none"}}>+ Adjuntar foto o PDF</span>
-      <span style={{fontSize:11,color:TM}}>Desde el celular o computadora</span>
-    </label>
-  </div>
-</Fld>
+                <Fld label="Observaciones">
+                  <textarea style={{...css.ta,height:72}} placeholder="Detalles, referencia al servidor interno..." value={newForm.descripcion} onChange={e=>setNewForm(f=>({...f,descripcion:e.target.value}))}/>
+                </Fld>
+                {newForm.obraId&&newForm.tipo&&(
+                  <div style={{borderLeft:`3px solid ${G}`,paddingLeft:12}}>
+                    <div style={{...css.lbl,color:TM,fontSize:9}}>Referencia del pedido</div>
+                    <div style={{fontFamily:"monospace",fontWeight:700,color:TX,fontSize:13,marginTop:2}}>{getRef(obras.find(o=>o.id===newForm.obraId)?.codigo||"???",newForm.tipo,pedidos,newForm.obraId)}</div>
+                  </div>
+                )}
+                {newErr&&<div style={{color:"#CC3333",fontSize:12,letterSpacing:"0.04em"}}>{newErr}</div>}
+                <div style={{display:"flex",gap:8,paddingTop:4}}>
+                  <button onClick={savePedido} disabled={obras.length===0||saving} style={{...btnS("primary"),opacity:obras.length===0||saving?0.4:1}}>{saving?"Guardando...":"Crear pedido"}</button>
+                  <button onClick={()=>nav("dashboard")} style={btnS("ghost")}>Cancelar</button>
+                </div>
+              </div>
             </div>
           </div>
-        )
+        )}
 
         {/* ── OBRAS ── */}
         {view==="obras"&&!sel&&isDir&&(
@@ -606,6 +560,7 @@ export default function App(){
             onBack={()=>{setSel(null);setView("dashboard");}}
             onUpdateMeta={newMeta=>updateMeta(sel,newMeta)}/>
         )}
+
       </main>
 
       {/* ── ACTION MODAL ── */}
@@ -638,9 +593,6 @@ function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onU
   const[recibidoDesc,setRecibidoDesc]=useState("");
   const[pendienteDesc,setPendienteDesc]=useState("");
   const[provNombre,setProvNombre]=useState("");
-  const[recepArchivos,setRecepArchivos]=useState([]);
-  const[savingRecep,setSavingRecep]=useState(false);
-
   const actions=getActions(pedido,user.role);
   const meta=pedido.metadata||{};
   const proveedores=meta.proveedores_cotizacion||[];
@@ -656,64 +608,20 @@ function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onU
   function updateProvEstado(id,estado){onUpdateMeta({...meta,proveedores_cotizacion:proveedores.map(p=>p.id===id?{...p,estado}:p)});}
   function removeProveedor(id){onUpdateMeta({...meta,proveedores_cotizacion:proveedores.filter(p=>p.id!==id)});}
 
-  async function handleDelivery(action){
+  function handleDelivery(action){
     if(!fechaRecepcion){alert("Ingresá la fecha de recepción");return;}
-    const hasFiles=recepArchivos.length>0;
-    setSavingRecep(true);
-    try{
-      // Upload reception files
-      let archivosUrls=[];
-      for(const file of recepArchivos){
-        const up=await uploadFile(file,pedido.id);
-        archivosUrls.push(up);
-      }
-      if(recepTipo==="parcial"){
-        if(!hasFiles&&!recibidoDesc.trim()){alert("Adjuntá archivos o detallá qué se recibió");setSavingRecep(false);return;}
-        const nueva={id:uid(),fecha:fechaRecepcion,nro_remito:nroRemito,recibido:recibidoDesc||(hasFiles?"(ver archivos adjuntos)":""),pendiente:pendienteDesc,ts:Date.now(),usuario:user.name,...(archivosUrls.length?{archivos:archivosUrls}:{})};
-        await onSimpleAction(pedido,{label:"Recepción Parcial",newEstado:pedido.estado},`Recibido: ${recibidoDesc||"(ver archivos)"}${pendienteDesc?`. Pend: ${pendienteDesc}`:""}`,{recepciones_parciales:[...(meta.recepciones_parciales||[]),nueva]});
-      }else{
-        await onSimpleAction(pedido,action,comment,{fecha_recepcion:fechaRecepcion,nro_remito:nroRemito,...(archivosUrls.length?{archivos_recepcion:archivosUrls}:{})});
-      }
-      setFechaRecepcion("");setNroRemito("");setRecibidoDesc("");setPendienteDesc("");setRecepTipo("total");setComment("");setRecepArchivos([]);
-    }catch(e){alert("Error al subir archivos.");}
-    setSavingRecep(false);
+    if(recepTipo==="parcial"){
+      if(!recibidoDesc.trim()){alert("Detallá qué se recibió");return;}
+      const nueva={id:uid(),fecha:fechaRecepcion,nro_remito:nroRemito,recibido:recibidoDesc,pendiente:pendienteDesc,ts:Date.now(),usuario:user.name};
+      onSimpleAction(pedido,{label:"Recepción Parcial",newEstado:pedido.estado},`Recibido: ${recibidoDesc}${pendienteDesc?`. Pend: ${pendienteDesc}`:""}`,{recepciones_parciales:[...(meta.recepciones_parciales||[]),nueva]});
+    }else{
+      onSimpleAction(pedido,action,comment,{fecha_recepcion:fechaRecepcion,nro_remito:nroRemito});
+    }
+    setFechaRecepcion("");setNroRemito("");setRecibidoDesc("");setPendienteDesc("");setRecepTipo("total");setComment("");
   }
 
   const est=ESTADOS[pedido.estado]||{label:pedido.estado.toUpperCase(),color:TM};
   const tip=TIPOS[pedido.tipo]||{label:pedido.tipo,color:TM};
-
-  // File list component
-  const FileList=({archivos,compact=false})=>archivos?.length>0?(
-    <div style={compact?{}:{border:`1px solid ${BD}`,marginTop:8}}>
-      {archivos.map((a,i)=>(
-        <a key={i} href={a.url} target="_blank" rel="noopener noreferrer"
-          style={{display:"flex",alignItems:"center",gap:8,padding:compact?"4px 0":"8px 14px",borderBottom:(!compact&&i<archivos.length-1)?`1px solid ${BD}`:"none",textDecoration:"none",color:TX}}>
-          <span style={{fontSize:14}}>{a.tipo?.startsWith("image/")?"🖼":"📄"}</span>
-          <span style={{fontSize:12,flex:1,color:G}}>{a.nombre}</span>
-          <span style={{fontSize:10,color:TM}}>↗</span>
-        </a>
-      ))}
-    </div>
-  ):null;
-
-  // File uploader component
-  const FileUploader=({files,setFiles,label="+ Adjuntar foto o PDF"})=>(
-    <div style={{border:`1px solid ${BD}`}}>
-      {files.map((f,i)=>(
-        <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderBottom:`1px solid ${BD}`}}>
-          <span style={{fontSize:13}}>{f.type.startsWith("image/")?"🖼":"📄"}</span>
-          <span style={{fontSize:12,flex:1,color:TX,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.name}</span>
-          <button type="button" onClick={()=>setFiles(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:TM,fontSize:12,padding:"0 2px"}}>✕</button>
-        </div>
-      ))}
-      <label style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",cursor:"pointer"}}>
-        <input type="file" accept="image/*,application/pdf" multiple style={{display:"none"}}
-          onChange={e=>{setFiles(prev=>[...prev,...Array.from(e.target.files)]);e.target.value="";}}/>
-        <span style={{...btnS("outline"),padding:"6px 12px",fontSize:10,pointerEvents:"none"}}>{label}</span>
-        <span style={{fontSize:11,color:TM}}>PDF o imagen</span>
-      </label>
-    </div>
-  );
 
   return(
     <div style={{maxWidth:680}}>
@@ -723,7 +631,7 @@ function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onU
       </div>
 
       <div style={{...css.card,padding:"24px 28px"}}>
-        {/* Header */}
+        {/* Header del pedido */}
         <div style={{borderBottom:`1px solid ${BD}`,paddingBottom:16,marginBottom:20}}>
           <div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:10,marginBottom:10}}>
             <span style={{fontFamily:"monospace",fontWeight:700,fontSize:13,color:TX}}>{pedido.referencia}</span>
@@ -738,17 +646,9 @@ function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onU
         </div>
 
         {pedido.descripcion&&(
-          <div style={{borderLeft:`3px solid ${BD}`,paddingLeft:12,marginBottom:16}}>
+          <div style={{borderLeft:`3px solid ${BD}`,paddingLeft:12,marginBottom:20}}>
             <div style={{...css.lbl,color:TM,fontSize:9,marginBottom:4}}>Observaciones</div>
             <div style={{fontSize:13,color:TX}}>{pedido.descripcion}</div>
-          </div>
-        )}
-
-        {/* Archivos del pedido */}
-        {meta.archivos?.length>0&&(
-          <div style={{border:`1px solid ${BD}`,marginBottom:16}}>
-            <div style={{...css.lbl,color:TM,fontSize:9,padding:"8px 14px",borderBottom:`1px solid ${BD}`}}>Archivos adjuntos ({meta.archivos.length})</div>
-            <FileList archivos={meta.archivos}/>
           </div>
         )}
 
@@ -769,7 +669,10 @@ function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onU
             <div style={{...css.lbl,color:G,fontSize:9,marginBottom:10}}>Datos de la compra</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 16px"}}>
               {[[meta.proveedor,"Proveedor"],[meta.contacto_nombre,"Contacto"],[meta.contacto_tel,"Teléfono"],[meta.contacto_mail,"Mail"],[meta.monto?fmtMoney(meta.monto):null,"Monto"],[meta.tipo_pago?({contra_entrega:"Contra entrega",anticipado:"Anticipado",pago_parcial:"Pago parcial"}[meta.tipo_pago]):null,"Forma de pago"],[meta.info_pago,"Info pago"],[meta.info_entrega,"Info entrega"],[meta.condiciones_pago,"Cond. pago"],[meta.condiciones_entrega,"Cond. entrega"],[meta.firma_contrato!==undefined?meta.firma_contrato?"Sí":"No":null,"Firma contrato"],[meta.firma_contrato&&meta.anexos?meta.anexos:null,"Anexos"]].filter(([v])=>v).map(([v,l])=>(
-                <div key={l}><div style={{...css.lbl,color:TM,fontSize:8}}>{l}</div><div style={{fontSize:12,color:TX,marginTop:1}}>{v}</div></div>
+                <div key={l}>
+                  <div style={{...css.lbl,color:TM,fontSize:8}}>{l}</div>
+                  <div style={{fontSize:12,color:TX,marginTop:1}}>{v}</div>
+                </div>
               ))}
             </div>
           </div>
@@ -784,7 +687,6 @@ function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onU
                 <div style={{...css.lbl,color:TM,fontSize:9}}>{r.fecha}{r.nro_remito?` · Remito: ${r.nro_remito}`:""} · {r.usuario}</div>
                 <div style={{fontSize:12,color:"#2D7A3A",marginTop:3}}><b>Recibido:</b> {r.recibido}</div>
                 {r.pendiente&&<div style={{fontSize:12,color:"#C47820",marginTop:2}}><b>Pendiente:</b> {r.pendiente}</div>}
-                {r.archivos?.length>0&&<FileList archivos={r.archivos} compact/>}
               </div>
             ))}
           </div>
@@ -795,7 +697,6 @@ function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onU
           <div style={{borderLeft:`3px solid #2D7A3A`,paddingLeft:12,marginBottom:16}}>
             <div style={{...css.lbl,color:"#2D7A3A",fontSize:9}}>✓ RECEPCIÓN TOTAL</div>
             <div style={{fontSize:12,color:TX,marginTop:2}}>{meta.fecha_recepcion}{meta.nro_remito?` · Remito: ${meta.nro_remito}`:""}</div>
-            {meta.archivos_recepcion?.length>0&&<FileList archivos={meta.archivos_recepcion} compact/>}
           </div>
         )}
 
@@ -831,8 +732,6 @@ function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onU
         {actions.length>0&&(
           <div style={{borderTop:`1px solid ${BD}`,paddingTop:20,marginTop:8}}>
             <div style={{...css.lbl,color:TX,fontSize:10,marginBottom:14}}>Tu acción requerida</div>
-
-            {/* Formulario de entrega */}
             {hasDelivery&&(
               <div style={{border:`1px solid ${BD}`,padding:"16px",marginBottom:14}}>
                 <div style={{...css.lbl,color:TM,fontSize:9,marginBottom:12}}>Datos de recepción</div>
@@ -844,55 +743,29 @@ function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onU
                     </button>
                   ))}
                 </div>
-
-                {/* Fecha siempre obligatoria */}
-                <div style={{marginBottom:12}}>
-                  <Fld label="Fecha de recepción *">
-                    <input type="date" style={css.input} value={fechaRecepcion} onChange={e=>setFechaRecepcion(e.target.value)}/>
-                  </Fld>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:recepTipo==="parcial"?10:0}}>
+                  <Fld label="Fecha *"><input type="date" style={css.input} value={fechaRecepcion} onChange={e=>setFechaRecepcion(e.target.value)}/></Fld>
+                  <Fld label="N° Remito"><input style={css.input} placeholder="0001-000123" value={nroRemito} onChange={e=>setNroRemito(e.target.value)}/></Fld>
                 </div>
-
-                <div style={{marginBottom:12}}>
-                  <Fld label="N° Remito">
-                    <input style={css.input} placeholder="0001-000123" value={nroRemito} onChange={e=>setNroRemito(e.target.value)}/>
-                  </Fld>
-                </div>
-
-                {/* Fotos/archivos */}
-                <div style={{marginBottom:recepTipo==="parcial"?12:0}}>
-                  <Fld label="Fotos o archivos (opcional si cargás descripción)">
-                    <FileUploader files={recepArchivos} setFiles={setRecepArchivos} label="+ Foto o archivo"/>
-                  </Fld>
-                </div>
-
-                {/* Campos de parcial — opcionales si hay archivos */}
                 {recepTipo==="parcial"&&(
                   <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                    <Fld label={`¿Qué se recibió?${recepArchivos.length>0?" (opcional)":"*"}`}>
-                      <textarea style={{...css.ta,height:56}} placeholder="Detallá items o cantidades recibidas..." value={recibidoDesc} onChange={e=>setRecibidoDesc(e.target.value)}/>
-                    </Fld>
-                    <Fld label="¿Qué queda pendiente?">
-                      <textarea style={{...css.ta,height:56}} placeholder="Detallá lo que falta..." value={pendienteDesc} onChange={e=>setPendienteDesc(e.target.value)}/>
-                    </Fld>
+                    <Fld label="¿Qué se recibió? *"><textarea style={{...css.ta,height:56}} placeholder="Detallá items o cantidades recibidas..." value={recibidoDesc} onChange={e=>setRecibidoDesc(e.target.value)}/></Fld>
+                    <Fld label="¿Qué queda pendiente?"><textarea style={{...css.ta,height:56}} placeholder="Detallá lo que falta..." value={pendienteDesc} onChange={e=>setPendienteDesc(e.target.value)}/></Fld>
                   </div>
                 )}
               </div>
             )}
-
             {!actions.some(a=>a.formType)&&!hasDelivery&&(
               <textarea style={{...css.ta,height:60,marginBottom:12}} placeholder="Comentario opcional..." value={comment} onChange={e=>setComment(e.target.value)}/>
             )}
-
             <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
               {actions.map(a=>(
-                <button key={a.label} disabled={savingRecep} onClick={()=>{
+                <button key={a.label} onClick={()=>{
                   if(a.formType){onFormAction(a);return;}
                   if(isDelivery(a)){handleDelivery(a);return;}
                   onSimpleAction(pedido,a,comment).then(()=>setComment(""));
-                }} style={{...btnS(ACT_BTN[a.color]||"primary"),opacity:savingRecep?0.5:1}}>
-                  {savingRecep&&isDelivery(a)?"Subiendo archivos..."
-                    :isDelivery(a)&&hasDelivery?(recepTipo==="parcial"?"Registrar Recepción Parcial":a.label)
-                    :a.label}
+                }} style={btnS(ACT_BTN[a.color]||"primary")}>
+                  {isDelivery(a)&&hasDelivery?(recepTipo==="parcial"?"Registrar Parcial":a.label):a.label}
                 </button>
               ))}
             </div>
@@ -919,6 +792,7 @@ function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onU
     </div>
   );
 }
+
 // ── Action Modal ───────────────────────────────────────────────
 function ActionModal({modal,onSubmit,onClose}){
   const{action,pedido}=modal;
