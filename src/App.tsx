@@ -251,7 +251,7 @@ export default function App(){
   }
 
   async function doSimpleAction(pedido,action,comment="",extraMeta={}){
-    const entry={accion:action.label,usuario:user.name,rol:RL[user.role],ts:Date.now(),comentario:comment};
+    const entry={accion:action.label,usuario:user.name,rol:RL[user.role],ts:Date.now(),comentario:comment,prev_estado:pedido.estado,prev_metadata:JSON.parse(JSON.stringify(pedido.metadata||{}))};
     const newH=[...pedido.historial,entry];const newMeta={...pedido.metadata,...extraMeta};
     try{await sb.patch("pedidos",pedido.id,{estado:action.newEstado,historial:newH,metadata:newMeta});const up={...pedido,estado:action.newEstado,historial:newH,metadata:newMeta};setPedidos(prev=>prev.map(p=>p.id===pedido.id?up:p));setSel(up);}
     catch(e){alert("Error al guardar la acción.");}
@@ -260,7 +260,7 @@ export default function App(){
   async function doFormAction(pedido,action,form){
     const{newEstado,newMeta}=resolveAction(action,pedido,form);
     if(!newEstado){alert("Error: no se pudo determinar el estado.");return;}
-    const entry={accion:action.label,usuario:user.name,rol:RL[user.role],ts:Date.now(),comentario:form.comment||""};
+    const entry={accion:action.label,usuario:user.name,rol:RL[user.role],ts:Date.now(),comentario:form.comment||"",prev_estado:pedido.estado,prev_metadata:JSON.parse(JSON.stringify(pedido.metadata||{}))};
     const newH=[...pedido.historial,entry];
     try{await sb.patch("pedidos",pedido.id,{estado:newEstado,historial:newH,metadata:newMeta});const up={...pedido,estado:newEstado,historial:newH,metadata:newMeta};setPedidos(prev=>prev.map(p=>p.id===pedido.id?up:p));setSel(up);setActionModal(null);}
     catch(e){alert("Error al guardar.");}
@@ -274,6 +274,33 @@ export default function App(){
   async function deletePedido(pedido){
     try{await sb.del("pedidos",pedido.id);setPedidos(prev=>prev.filter(p=>p.id!==pedido.id));setSel(null);nav("dashboard");setDelConfirm(null);}
     catch(e){alert("Error al eliminar.");}
+  }
+
+  async function editPedido(pedido,form){
+    const entry={accion:"Pedido editado",usuario:user.name,rol:RL[user.role],ts:Date.now(),comentario:"Pedido modificado por el creador"};
+    const newH=[...pedido.historial,entry];
+    const updates={titulo:form.titulo.trim(),descripcion:form.descripcion.trim(),historial:newH,...(form.fechaEntrega?{fecha_entrega:form.fechaEntrega}:{}),...(form.urgencia?{urgencia:form.urgencia}:{})};
+    try{
+      await sb.patch("pedidos",pedido.id,updates);
+      const up={...pedido,...updates,fechaEntrega:form.fechaEntrega,historial:newH};
+      setPedidos(prev=>prev.map(p=>p.id===pedido.id?up:p));setSel(up);
+    }catch(e){alert("Error al editar.");}
+  }
+
+  async function doUndoLastStep(pedido,motivo){
+    const hist=[...pedido.historial];
+    if(hist.length<=1){alert("No se puede deshacer la creación del pedido.");return;}
+    const lastEntry=hist[hist.length-1];
+    const prevEstado=lastEntry.prev_estado;
+    const prevMeta=lastEntry.prev_metadata!==undefined?lastEntry.prev_metadata:(pedido.metadata||{});
+    if(!prevEstado){alert("No hay información suficiente para deshacer este paso.");return;}
+    const undoEntry={accion:"↩ Paso deshecho",usuario:user.name,rol:RL[user.role],ts:Date.now(),comentario:motivo};
+    const newH=[...hist.slice(0,-1),undoEntry];
+    try{
+      await sb.patch("pedidos",pedido.id,{estado:prevEstado,historial:newH,metadata:prevMeta});
+      const up={...pedido,estado:prevEstado,historial:newH,metadata:prevMeta};
+      setPedidos(prev=>prev.map(p=>p.id===pedido.id?up:p));setSel(up);
+    }catch(e){alert("Error al deshacer.");}
   }
 
   if(!loaded)return(
@@ -595,7 +622,9 @@ export default function App(){
             onFormAction={action=>setActionModal({action,pedido:sel})}
             onDelete={isDir?()=>setDelConfirm(sel):null}
             onBack={()=>{setSel(null);setView("dashboard");}}
-            onUpdateMeta={newMeta=>updateMeta(sel,newMeta)}/>
+            onUpdateMeta={newMeta=>updateMeta(sel,newMeta)}
+            onEdit={form=>editPedido(sel,form)}
+            onUndo={(motivo)=>doUndoLastStep(sel,motivo)}/>
         )}
       </main>
 
@@ -618,7 +647,7 @@ export default function App(){
   );
 }
 
-function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onUpdateMeta}){
+function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onUpdateMeta,onEdit,onUndo}){
   const[comment,setComment]=useState("");
   const[fechaRecepcion,setFechaRecepcion]=useState("");
   const[nroRemito,setNroRemito]=useState("");
@@ -628,6 +657,15 @@ function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onU
   const[provNombre,setProvNombre]=useState("");
   const[recepArchivos,setRecepArchivos]=useState([]);
   const[savingRecep,setSavingRecep]=useState(false);
+  // PUNTO 1 — editar pedido
+  const[editMode,setEditMode]=useState(false);
+  const[editForm,setEditForm]=useState({titulo:"",descripcion:"",fechaEntrega:"",urgencia:""});
+  const[editErr,setEditErr]=useState("");
+  const[savingEdit,setSavingEdit]=useState(false);
+  // PUNTO 3 — deshacer
+  const[undoMode,setUndoMode]=useState(false);
+  const[undoMotivo,setUndoMotivo]=useState("");
+  const[savingUndo,setSavingUndo]=useState(false);
 
   const actions=getActions(pedido,user.role);
   const meta=pedido.metadata||{};
@@ -637,12 +675,32 @@ function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onU
   const hasDelivery=actions.some(isDelivery);
   const canManageProvs=user.role==="compras"||user.role==="director"||(user.role==="arquitecto"&&pedido.tipo==="licitacion");
   const isActive=ACTIVE_ESTADOS.includes(pedido.estado);
+  // PUNTO 1: puede editar si es el creador y el pedido está en estado inicial
+  const canEdit=pedido.creado_por===user.id&&(pedido.estado==="nuevo"||(pedido.estado==="doc_lista"&&pedido.tipo==="licitacion"));
+  // PUNTO 2: puede cargar/modificar fecha pactada
+  const canFechaPactada=["compras","jefe_obra","admin","director"].includes(user.role)&&pedido.estado==="pend_entrega";
   const PROV_EST={enviado_a_cotizar:{label:"Enviado",color:"#2D7A3A"},presup_recibido:{label:"Recibido",color:G},recibido_con_error:{label:"Con error",color:"#CC3333"}};
 
   function toggleEnProceso(){onUpdateMeta({...meta,en_proceso:!meta.en_proceso});}
   function addProveedor(){if(!provNombre.trim())return;onUpdateMeta({...meta,proveedores_cotizacion:[...proveedores,{id:uid(),nombre:provNombre.trim(),estado:"enviado_a_cotizar",ts:Date.now()}]});setProvNombre("");}
   function updateProvEstado(id,estado){onUpdateMeta({...meta,proveedores_cotizacion:proveedores.map(p=>p.id===id?{...p,estado}:p)});}
   function removeProveedor(id){onUpdateMeta({...meta,proveedores_cotizacion:proveedores.filter(p=>p.id!==id)});}
+
+  function openEdit(){setEditForm({titulo:pedido.titulo,descripcion:pedido.descripcion||"",fechaEntrega:pedido.fechaEntrega||"",urgencia:pedido.urgencia||""});setEditErr("");setEditMode(true);}
+  async function submitEdit(){
+    if(!editForm.titulo.trim()){setEditErr("El título es obligatorio");return;}
+    if(pedido.tipo==="compra_chica"&&!editForm.fechaEntrega){setEditErr("La fecha de entrega es obligatoria");return;}
+    setSavingEdit(true);
+    await onEdit(editForm);
+    setSavingEdit(false);setEditMode(false);
+  }
+
+  async function submitUndo(){
+    if(!undoMotivo.trim()){alert("Escribí el motivo del deshacer");return;}
+    setSavingUndo(true);
+    await onUndo(undoMotivo);
+    setSavingUndo(false);setUndoMode(false);setUndoMotivo("");
+  }
 
   async function handleDelivery(action){
     if(!fechaRecepcion){alert("Ingresá la fecha de recepción");return;}
@@ -686,7 +744,10 @@ function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onU
     <div style={{maxWidth:680}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
         <button onClick={onBack} style={{...btnS("ghost"),padding:"0",color:TM,letterSpacing:"0.08em",fontSize:11}}>← VOLVER</button>
-        {onDelete&&isActive&&<button onClick={onDelete} style={{...btnS("danger"),padding:"6px 12px",fontSize:10}}>Eliminar pedido</button>}
+        <div style={{display:"flex",gap:8}}>
+          {canEdit&&<button onClick={openEdit} style={{...btnS("outline"),padding:"6px 12px",fontSize:10}}>✏ Editar pedido</button>}
+          {onDelete&&isActive&&<button onClick={onDelete} style={{...btnS("danger"),padding:"6px 12px",fontSize:10}}>Eliminar pedido</button>}
+        </div>
       </div>
 
       <div style={{...css.card,padding:"24px 28px"}}>
@@ -714,6 +775,23 @@ function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onU
           <div style={{border:`1px solid ${BD}`,marginBottom:16}}>
             <div style={{...css.lbl,color:TM,fontSize:9,padding:"8px 14px",borderBottom:`1px solid ${BD}`}}>Archivos adjuntos ({meta.archivos.length})</div>
             <FileList archivos={meta.archivos}/>
+          </div>
+        )}
+
+        {/* PUNTO 2: Fecha pactada en obra — visible cuando está en pend_entrega */}
+        {(pedido.estado==="pend_entrega"||(meta.fecha_pactada_obra&&pedido.estado!=="nuevo"))&&(
+          <div style={{border:`1px solid #2D7A3A`,padding:"14px 16px",marginBottom:16}}>
+            <div style={{...css.lbl,color:"#2D7A3A",fontSize:9,marginBottom:8}}>📦 Fecha pactada de entrega en obra</div>
+            {canFechaPactada?(
+              <>
+                <input type="date" style={css.input} value={meta.fecha_pactada_obra||""} onChange={e=>onUpdateMeta({...meta,fecha_pactada_obra:e.target.value})}/>
+                <div style={{fontSize:11,color:TM,marginTop:6}}>Opcional. Visible para todo el equipo.</div>
+              </>
+            ):(
+              meta.fecha_pactada_obra
+                ?<div style={{fontSize:14,fontWeight:700,color:"#2D7A3A"}}>{meta.fecha_pactada_obra}</div>
+                :<div style={{fontSize:12,color:TM}}>Sin fecha pactada cargada aún</div>
+            )}
           </div>
         )}
 
@@ -854,13 +932,32 @@ function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onU
         )}
 
         <div style={{borderTop:`1px solid ${BD}`,paddingTop:20,marginTop:20}}>
-          <div style={{...css.lbl,color:TM,fontSize:9,marginBottom:14}}>Historial</div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+            <div style={{...css.lbl,color:TM,fontSize:9}}>Historial</div>
+            {/* PUNTO 3: Botón deshacer — solo directores, solo si hay más de 1 entrada y el pedido no está archivado/rechazado */}
+            {user.role==="director"&&pedido.historial.length>1&&isActive&&!undoMode&&(
+              <button onClick={()=>setUndoMode(true)} style={{...btnS("danger"),padding:"5px 12px",fontSize:10}}>↩ Deshacer último paso</button>
+            )}
+          </div>
+          {undoMode&&(
+            <div style={{border:`1px solid #CC3333`,padding:"14px 16px",marginBottom:16}}>
+              <div style={{...css.lbl,color:"#CC3333",fontSize:9,marginBottom:8}}>↩ DESHACER ÚLTIMO PASO</div>
+              <div style={{fontSize:12,color:TM,marginBottom:10}}>
+                Esto revertirá: <b style={{color:TX}}>{pedido.historial[pedido.historial.length-1]?.accion}</b> realizado por {pedido.historial[pedido.historial.length-1]?.usuario}.
+              </div>
+              <textarea style={{...css.ta,height:72,marginBottom:10}} placeholder="Motivo del deshacer (obligatorio)..." value={undoMotivo} onChange={e=>setUndoMotivo(e.target.value)}/>
+              <div style={{display:"flex",gap:8}}>
+                <button onClick={submitUndo} disabled={savingUndo||!undoMotivo.trim()} style={{...btnS("danger"),opacity:savingUndo||!undoMotivo.trim()?0.4:1}}>{savingUndo?"Deshaciendo...":"Confirmar Deshacer"}</button>
+                <button onClick={()=>{setUndoMode(false);setUndoMotivo("");}} style={btnS("ghost")}>Cancelar</button>
+              </div>
+            </div>
+          )}
           <div style={{display:"flex",flexDirection:"column",gap:0}}>
             {[...pedido.historial].reverse().map((h,i)=>(
               <div key={i} style={{display:"flex",gap:14,paddingTop:i>0?10:0,marginTop:i>0?10:0,borderTop:i>0?`1px solid ${BD}`:"none"}}>
-                <div style={{width:6,height:6,background:G,marginTop:5,flexShrink:0}}/>
+                <div style={{width:6,height:6,background:h.accion.startsWith("↩")?"#CC3333":G,marginTop:5,flexShrink:0}}/>
                 <div>
-                  <span style={{fontSize:12,fontWeight:700,color:TX}}>{h.accion}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:h.accion.startsWith("↩")?"#CC3333":TX}}>{h.accion}</span>
                   <span style={{fontSize:11,color:TM}}> · {h.usuario} ({h.rol}) · {fmtDate(h.ts)}</span>
                   {h.comentario&&<div style={{fontSize:12,color:TM,marginTop:3,fontStyle:"italic"}}>"{h.comentario}"</div>}
                 </div>
@@ -869,6 +966,50 @@ function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onU
           </div>
         </div>
       </div>
+      {/* PUNTO 1: Modal de edición */}
+      {editMode&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:24,overflowY:"auto"}}>
+          <div style={{background:CB,border:`1px solid ${BD}`,padding:28,width:"100%",maxWidth:520,margin:"auto"}}>
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:20,borderBottom:`1px solid ${BD}`,paddingBottom:14}}>
+              <div>
+                <div style={{...css.lbl,color:TX,fontSize:11}}>Editar pedido</div>
+                <div style={{fontFamily:"monospace",fontSize:11,color:TM,marginTop:3}}>{pedido.referencia}</div>
+              </div>
+              <button onClick={()=>setEditMode(false)} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:TM,lineHeight:1}}>×</button>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:14}}>
+              <Fld label="Título *">
+                <input style={css.input} value={editForm.titulo} onChange={e=>setEditForm(p=>({...p,titulo:e.target.value}))}/>
+              </Fld>
+              {pedido.tipo==="compra_chica"&&(
+                <Fld label="Fecha de entrega *">
+                  <input type="date" style={css.input} min={minDel()} value={editForm.fechaEntrega} onChange={e=>setEditForm(p=>({...p,fechaEntrega:e.target.value}))}/>
+                </Fld>
+              )}
+              {["compra_grande","licitacion","acopio"].includes(pedido.tipo)&&(
+                <Fld label="Urgencia">
+                  <div style={{display:"flex",gap:0}}>
+                    {["bajo","medio","alto"].map((u,i)=>(
+                      <button key={u} type="button" onClick={()=>setEditForm(p=>({...p,urgencia:u}))}
+                        style={{flex:1,padding:"10px 8px",fontSize:11,letterSpacing:"0.1em",textTransform:"uppercase",fontWeight:700,cursor:"pointer",fontFamily:"inherit",border:`1px solid ${BD}`,borderLeft:i>0?"none":undefined,background:editForm.urgencia===u?URG[u].color:"transparent",color:editForm.urgencia===u?"#fff":TM}}>
+                        {u==="bajo"?"↓ Bajo":u==="medio"?"→ Medio":"↑ Alto"}
+                      </button>
+                    ))}
+                  </div>
+                </Fld>
+              )}
+              <Fld label="Observaciones">
+                <textarea style={{...css.ta,height:80}} value={editForm.descripcion} onChange={e=>setEditForm(p=>({...p,descripcion:e.target.value}))}/>
+              </Fld>
+              {editErr&&<div style={{color:"#CC3333",fontSize:12,letterSpacing:"0.04em"}}>{editErr}</div>}
+              <div style={{display:"flex",gap:8,paddingTop:4}}>
+                <button onClick={submitEdit} disabled={savingEdit} style={{...btnS("primary"),opacity:savingEdit?0.4:1}}>{savingEdit?"Guardando...":"Guardar cambios"}</button>
+                <button onClick={()=>setEditMode(false)} style={btnS("ghost")}>Cancelar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1028,6 +1169,7 @@ function PCard({p,onClick}){
         <div style={{fontWeight:700,fontSize:14,color:TX,marginBottom:2}}>{p.titulo}</div>
         <div style={{fontSize:11,color:TM}}>🏢 {p.obraNombre}</div>
         {p.fechaEntrega&&<div style={{fontSize:11,color:TM,marginTop:1}}>📅 {p.fechaEntrega}</div>}
+        {p.estado==="pend_entrega"&&<div style={{fontSize:11,color:p.metadata?.fecha_pactada_obra?"#2D7A3A":"#C47820",marginTop:1,fontWeight:p.metadata?.fecha_pactada_obra?700:400}}>{p.metadata?.fecha_pactada_obra?`📦 Entrega obra: ${p.metadata.fecha_pactada_obra}`:"📦 Sin fecha pactada"}</div>}
         <div style={{fontSize:11,color:TM,marginTop:3}}>{p.creado_nombre} · {fmtDate(p.creado_at)}</div>
       </div>
       <div style={{color:BD,fontSize:14,marginTop:2}}>›</div>
