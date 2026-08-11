@@ -95,13 +95,22 @@ function getActions(pedido,role){
     if(estado==="pend_pago"&&(isAd||d)){const next=meta.route==="anticipado"?"pend_entrega":"archivado";return[{label:"Marcar Pagado",newEstado:next,color:"purple"}];}
     if(estado==="pend_pago_saldo"&&(isAd||d))return[{label:"Marcar Saldo Pagado",newEstado:"archivado",color:"purple"}];
   }
-  if(tipo==="licitacion"){
-    if(estado==="nuevo"){if(isAr)return[{label:"Documentación Lista",newEstado:"doc_lista",color:"indigo"}];if(isCo||d)return[rej];}
-    if(estado==="doc_lista"&&(isCo||d))return[{label:"Marcar Cotizado",newEstado:"cotizado",color:"sky"},rej];
-    if(estado==="cotizado"){if(d)return[{label:"Aprobar",newEstado:null,color:"green",formType:"approve_dir_licitacion"},rej];if(isCo)return[rej];}
-    if(estado==="pendiente_firma"&&(isAd||d))return[{label:"Marcar Contrato Firmado",newEstado:"archivado",color:"emerald"}];
-    if(estado==="pend_pago"&&(isAd||d))return[{label:"Marcar Anticipo Pagado",newEstado:"archivado",color:"purple"}];
+if(tipo==="licitacion"){
+  if(estado==="nuevo"){
+    if(isAr)return[{label:"Documentación Lista",newEstado:"doc_lista",color:"indigo"}];
+    if(isCo||d)return[{label:"Marcar Cotizado",newEstado:"cotizado",color:"sky"},rej];
   }
+  if(estado==="doc_lista"){
+    if(isAr)return[{label:"Marcar Cotizado",newEstado:"cotizado",color:"sky"}];
+    if(isCo||d)return[{label:"Marcar Cotizado",newEstado:"cotizado",color:"sky"},rej];
+  }
+  if(estado==="cotizado"){
+    if(d)return[{label:"Aprobar",newEstado:null,color:"green",formType:"approve_dir_licitacion"},rej];
+    if(isCo)return[rej];
+  }
+  if(estado==="pendiente_firma"&&(isAd||d))return[{label:"Marcar Contrato Firmado",newEstado:"archivado",color:"emerald"}];
+  if(estado==="pend_pago"&&(isAd||d))return[{label:"Marcar Anticipo Pagado",newEstado:"archivado",color:"purple"}];
+}
   if(tipo==="acopio"){
     if(estado==="nuevo"&&(isCo||d))return[{label:"Marcar Cotizado",newEstado:"cotizado",color:"sky"},rej];
     if(estado==="cotizado"){if(d)return[{label:"Aprobar",newEstado:null,color:"green",formType:"approve_dir_acopio"},rej];if(isCo)return[rej];}
