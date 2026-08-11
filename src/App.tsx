@@ -788,21 +788,15 @@ function DetailView({pedido,user,onSimpleAction,onFormAction,onDelete,onBack,onU
         )}
 
         {/* PUNTO 2: Fecha pactada en obra — visible cuando está en pend_entrega */}
-        {(pedido.estado==="pend_entrega"||(meta.fecha_pactada_obra&&pedido.estado!=="nuevo"))&&(
-          <div style={{border:`1px solid #2D7A3A`,padding:"14px 16px",marginBottom:16}}>
-            <div style={{...css.lbl,color:"#2D7A3A",fontSize:9,marginBottom:8}}>📦 Fecha pactada de entrega en obra</div>
-            {canFechaPactada?(
-              <>
-                <input type="date" style={css.input} value={meta.fecha_pactada_obra||""} onChange={e=>onUpdateMeta({...meta,fecha_pactada_obra:e.target.value})}/>
-                <div style={{fontSize:11,color:TM,marginTop:6}}>Opcional. Visible para todo el equipo.</div>
-              </>
-            ):(
-              meta.fecha_pactada_obra
-                ?<div style={{fontSize:14,fontWeight:700,color:"#2D7A3A"}}>{meta.fecha_pactada_obra}</div>
-                :<div style={{fontSize:12,color:TM}}>Sin fecha pactada cargada aún</div>
-            )}
-          </div>
-        )}
+        {isActive&&canFechaPactada&&(
+<div style={{border:`1px solid #2D7A3A`,padding:"14px 16px",marginBottom:16}}>
+  <div style={{...css.lbl,color:"#2D7A3A",fontSize:9,marginBottom:8}}>📦 Fecha pactada de entrega en obra</div>
+  <input type="date" style={css.input}
+    value={meta.fecha_pactada_obra||""}
+    onChange={e=>onUpdateMeta({...meta,fecha_pactada_obra:e.target.value})}/>
+  <div style={{fontSize:11,color:TM,marginTop:6}}>Opcional. Visible para todo el equipo en el dashboard.</div>
+</div>
+)}
 
         {(user.role==="compras"||user.role==="director")&&isActive&&(
           <div style={{border:`1px solid #C47820`,padding:"12px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12}}>
